@@ -46,6 +46,19 @@ value. This module deliberately adds no privilege of its own:
   driver through the environment (never argv, which is world-readable in
   ``ps``), and reaping works from site ids alone.
 
+THE SAME DRIVER FOR A WORKSPACE'S SIMULATED FLEET (0019)
+--------------------------------------------------------
+``sandbox-drive --auth ingest`` moves a self-serve workspace's fleet with
+an *ingest key* (``x-yf-ingest-key`` -> ``public.yf_ingest_site()``,
+namespace ``WS-*``) instead of a demo token. Everything above still
+holds — the anon key plus one bearer secret, every id namespaced with the
+site, no ``fleet_meta``, the credential in the environment — with three
+differences spelled out on :class:`SandboxDriver`: the ``WS-`` namespace,
+no history seeding, and liveness defined as "the last write was not
+refused" (``workspace_sim_stop`` revokes the key; RLS answers 401/403;
+the driver exits). The HTTP door starts these from
+``POST /api/workspace/sim/start`` (see :mod:`yantraops.sandbox_http`).
+
 RESOURCE CEILING
 ----------------
 Two independent caps, because a front page on Hacker News must not take
@@ -98,8 +111,40 @@ TOKEN_RE = re.compile(r"^[0-9a-f]{32,128}$")
 #: bad reply can never aim the driver at a real site.
 SITE_RE = re.compile(r"^DEMO-[0-9A-Za-z]{4,32}$")
 
+#: 0019's second machine namespace (``public.yf_is_workspace_site``): a
+#: self-serve workspace. The driver in ``--auth ingest`` mode refuses any
+#: site that is not exactly this shape, for the same reason it refuses a
+#: non-DEMO site in demo mode — a bad RPC reply must never aim the
+#: simulator at a legacy fleet.
+WS_SITE_PREFIX = "WS-"
+WS_SITE_RE = re.compile(r"^WS-[0-9a-f]{8}$")
+
+#: The header a workspace writer presents (``public.yf_ingest_key``), and
+#: the key's shape: ``yk_`` + 64 lowercase hex (two v4 UUIDs of entropy).
+INGEST_KEY_HEADER = "x-yf-ingest-key"
+INGEST_KEY_RE = re.compile(r"^yk_[0-9a-f]{64}$")
+
+#: How an ingest key reaches ``sandbox-drive --auth ingest``. Environment,
+#: never argv, for exactly the reason :data:`DEMO_TOKEN_ENV` exists.
+INGEST_KEY_ENV = "YANTRAOPS_INGEST_KEY"
+
+#: The two credential modes ``sandbox-drive`` understands.
+AUTH_DEMO = "demo"
+AUTH_INGEST = "ingest"
+AUTH_MODES = (AUTH_DEMO, AUTH_INGEST)
+
 #: Per-box ceiling on concurrent sandboxes (env ``YANTRAOPS_SANDBOX_MAX``).
 DEFAULT_MAX_LIVE = 8
+
+#: Per-box ceiling on concurrent WORKSPACE simulators (env
+#: ``YANTRAOPS_WORKSPACE_MAX``). Counted separately from sandboxes: a busy
+#: marketing page must not lock paying workspaces out of their own
+#: simulated fleet, and vice versa.
+DEFAULT_WORKSPACE_MAX_LIVE = 12
+
+#: Registry row kinds. A record is one of these and nothing else.
+KIND_DEMO = "demo"
+KIND_WORKSPACE = "workspace"
 
 #: Where the per-box registry of live sandboxes lives.
 DEFAULT_STATE_ENV = "YANTRAOPS_SANDBOX_STATE"
@@ -193,6 +238,29 @@ def is_demo_site(site: Any) -> bool:
 def valid_token(token: Any) -> bool:
     """Python mirror of ``yf_demo_token()``'s shape guard."""
     return isinstance(token, str) and bool(TOKEN_RE.match(token))
+
+
+def is_workspace_site(site: Any) -> bool:
+    """Python mirror of ``public.yf_is_workspace_site`` (0019)."""
+    return isinstance(site, str) and bool(WS_SITE_RE.match(site))
+
+
+def valid_ingest_key(key: Any) -> bool:
+    """Python mirror of ``yf_ingest_key()``'s shape guard (0019)."""
+    return isinstance(key, str) and bool(INGEST_KEY_RE.match(key))
+
+
+def resolve_workspace_max_live(flag: int | None = None) -> int:
+    """Workspace-sim ceiling: flag > env ``YANTRAOPS_WORKSPACE_MAX`` > default."""
+    if flag is not None:
+        return max(int(flag), 0)
+    raw = os.environ.get("YANTRAOPS_WORKSPACE_MAX", "").strip()
+    if raw:
+        try:
+            return max(int(raw), 0)
+        except ValueError:
+            pass
+    return DEFAULT_WORKSPACE_MAX_LIVE
 
 
 def default_state_file() -> Path:
@@ -305,11 +373,20 @@ class SandboxAPI:
 
     def __init__(self, base_url: str, key: str, *,
                  client: Any = None, timeout_s: float = 10.0,
-                 demo_token: str | None = None) -> None:
+                 demo_token: str | None = None,
+                 ingest_key: str | None = None,
+                 user_jwt: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.rest = f"{self.base_url}/rest/v1"
         self.key = key
         self.demo_token = demo_token
+        #: 0019: default ``x-yf-ingest-key`` for every request (the
+        #: workspace driver's credential), overridable per call.
+        self.ingest_key = ingest_key
+        #: 0019: a person's own Supabase JWT, forwarded UNCHANGED as the
+        #: ``Authorization`` bearer (``apikey`` stays the anon key) so the
+        #: workspace RPCs run as that person — the door holds no privilege.
+        self.user_jwt = user_jwt
         self._timeout_s = timeout_s
         self._client = client
         self._owned = client is None
@@ -338,12 +415,17 @@ class SandboxAPI:
         self.close()
 
     def headers(self, *, token: str | None = None,
+                ingest_key: str | None = None,
                 extra: dict[str, str] | None = None) -> dict[str, str]:
-        h = {"apikey": self.key, "Authorization": f"Bearer {self.key}",
+        bearer = self.user_jwt or self.key
+        h = {"apikey": self.key, "Authorization": f"Bearer {bearer}",
              "Content-Type": "application/json"}
         tok = token if token is not None else self.demo_token
         if tok:
             h[DEMO_TOKEN_HEADER] = tok
+        ik = ingest_key if ingest_key is not None else self.ingest_key
+        if ik:
+            h[INGEST_KEY_HEADER] = ik
         h.update(extra or {})
         return h
 
@@ -364,12 +446,13 @@ class SandboxAPI:
     # -- RPCs -------------------------------------------------------------
 
     def rpc(self, fn: str, args: dict[str, Any] | None = None, *,
-            token: str | None = None) -> Any:
+            token: str | None = None, ingest_key: str | None = None) -> Any:
         """POST /rest/v1/rpc/<fn>; raise :class:`SandboxError` on failure."""
         try:
             resp = self.client.post(f"{self.rest}/rpc/{fn}",
                                     json=args or {},
-                                    headers=self.headers(token=token))
+                                    headers=self.headers(token=token,
+                                                         ingest_key=ingest_key))
         except Exception as exc:  # noqa: BLE001 - network/DNS/TLS all land here
             raise SandboxError(
                 f"{fn}: backend unreachable ({type(exc).__name__}: {exc})"
@@ -417,7 +500,8 @@ class SandboxAPI:
 
     def write(self, table: str, rows: Sequence[dict[str, Any]], *,
               on_conflict: str | None = None, merge: bool = True,
-              token: str | None = None) -> None:
+              token: str | None = None,
+              ingest_key: str | None = None) -> None:
         """Bulk insert/upsert, same PostgREST dialect the sim transport uses."""
         if not rows:
             return
@@ -429,7 +513,8 @@ class SandboxAPI:
         try:
             resp = self.client.post(
                 f"{self.rest}/{table}", json=list(rows), params=params,
-                headers=self.headers(token=token, extra={"Prefer": prefer}))
+                headers=self.headers(token=token, ingest_key=ingest_key,
+                                     extra={"Prefer": prefer}))
         except Exception as exc:  # noqa: BLE001
             raise SandboxError(
                 f"{table}: write failed ({type(exc).__name__}: {exc})") from exc
@@ -443,10 +528,14 @@ class SandboxAPI:
 
 @dataclass
 class SandboxRecord:
-    """One live sandbox on this box. Deliberately token-free.
+    """One live simulator on this box. Deliberately token-free.
 
     ``console_url`` is the *reference* form (no ``demo=`` param): enough to
-    tell which sandbox a row is, never enough to open it.
+    tell which sandbox a row is, never enough to open it. ``kind`` is
+    :data:`KIND_DEMO` for a marketing sandbox and :data:`KIND_WORKSPACE`
+    for a self-serve workspace's simulated fleet (0019); the two are
+    counted against separate ceilings and a workspace row never carries a
+    console URL (the owner already has one — their own sign-in).
     """
 
     site_id: str
@@ -456,6 +545,7 @@ class SandboxRecord:
     origin: str | None = None
     started_at: str | None = None
     robots: int = 0
+    kind: str = KIND_DEMO
 
     def expired(self, now: datetime | None = None) -> bool:
         exp = _parse_ts(self.expires_at)
@@ -537,6 +627,7 @@ class SandboxRegistry:
         for row in rows if isinstance(rows, list) else []:
             if not isinstance(row, dict) or not row.get("site_id"):
                 continue
+            kind = str(row.get("kind") or KIND_DEMO)
             out.append(SandboxRecord(
                 site_id=str(row.get("site_id")),
                 expires_at=row.get("expires_at"),
@@ -544,7 +635,10 @@ class SandboxRegistry:
                 console_url=row.get("console_url"),
                 origin=row.get("origin"),
                 started_at=row.get("started_at"),
-                robots=int(row.get("robots") or 0)))
+                robots=int(row.get("robots") or 0),
+                # A row written by an older yantraops has no kind: it is a
+                # demo sandbox, which is all older versions could record.
+                kind=kind if kind in (KIND_DEMO, KIND_WORKSPACE) else KIND_DEMO))
         return out
 
     def save(self, records: Iterable[SandboxRecord]) -> None:
@@ -566,12 +660,19 @@ class SandboxRegistry:
         records.append(record)
         self.save(records)
 
-    def live(self, now: datetime | None = None) -> list[SandboxRecord]:
+    def live(self, now: datetime | None = None, *,
+             kind: str | None = None) -> list[SandboxRecord]:
+        """Unexpired records — every kind, or just ``kind``."""
         now = now or _now()
-        return [r for r in self.load() if not r.expired(now)]
+        return [r for r in self.load()
+                if not r.expired(now) and (kind is None or r.kind == kind)]
 
-    def live_count(self, now: datetime | None = None) -> int:
-        return len(self.live(now))
+    def live_count(self, now: datetime | None = None, *,
+                   kind: str | None = None) -> int:
+        return len(self.live(now, kind=kind))
+
+    def find(self, site_id: str) -> SandboxRecord | None:
+        return next((r for r in self.load() if r.site_id == site_id), None)
 
     def drop(self, sites: Iterable[str]) -> None:
         dead = set(sites)
@@ -779,21 +880,22 @@ ROBOT_COLUMNS = ("id,vendor,status,battery,pos,speed,task_kind,health,"
                  "motor_temp,tasks_done,site_id")
 
 
-def read_sandbox_robots(api: "SandboxAPI", token: str,
-                        limit: int = 60) -> list[dict[str, Any]]:
-    """The sandbox's fleet, read through the sandbox's own demo token.
+def read_sandbox_robots(api: "SandboxAPI", token: str | None,
+                        limit: int = 60, *,
+                        ingest_key: str | None = None) -> list[dict[str, Any]]:
+    """The site's fleet, read through its own machine credential.
 
-    Deliberately the visitor's credential and not a service key: if 0009's
-    read policy were ever misconfigured this comes back empty and the
-    sandbox breaks loudly, instead of quietly working for us and for
-    nobody else.
+    Deliberately the visitor's demo token (or the workspace's ingest key)
+    and not a service key: if 0009's/0019's read policy were ever
+    misconfigured this comes back empty and the simulator breaks loudly,
+    instead of quietly working for us and for nobody else.
     """
     try:
         resp = api.client.get(
             f"{api.rest}/robots",
             params={"select": ROBOT_COLUMNS, "order": "id.asc",
                     "limit": str(int(limit))},
-            headers=api.headers(token=token))
+            headers=api.headers(token=token, ingest_key=ingest_key))
     except Exception as exc:  # noqa: BLE001
         raise SandboxError(
             f"robots: read failed ({type(exc).__name__}: {exc})") from exc
@@ -1002,37 +1104,68 @@ class HistorySeeder:
 # --------------------------------------------------------------------------
 
 class SandboxDriver:
-    """Runs ``yantrasim``'s :class:`FleetSim` scoped to one sandbox.
+    """Runs ``yantrasim``'s :class:`FleetSim` scoped to one site.
 
     The simulator library is reused verbatim — same physics, same fault
     scripts, same VDA 5050 state — but the rows it produces are rewritten
     twice before they are posted:
 
-    * ``site_id`` is forced to this sandbox (never ``yantracore.site_id()``,
+    * ``site_id`` is forced to this site (never ``yantracore.site_id()``,
       which reads a process-wide env var and would be wrong here), and
-    * every primary key is prefixed with the sandbox site, so ``AMR-01``
-      becomes ``DEMO-0A1B2C3D4E5F-R01`` and can never collide with a real
-      fleet's row or another sandbox's.
+    * every primary key is prefixed with the site, so ``AMR-01`` becomes
+      ``DEMO-0A1B2C3D4E5F-R01`` (or ``WS-1a2b3c4d-R01``) and can never
+      collide with a real fleet's row or another site's.
 
     ``fleet_meta`` is not written at all: it has no ``site_id``, so 0009
-    keeps it off-limits to anon and there is nothing to scope it by.
+    and 0019 keep it off-limits to anon and there is nothing to scope it by.
+
+    Two credential modes, one driver (``auth``):
+
+    * :data:`AUTH_DEMO` — a marketing sandbox: ``DEMO-*`` site, the demo
+      token in ``x-yf-demo-token``, liveness asked of
+      ``demo_session_info``.
+    * :data:`AUTH_INGEST` — a workspace's simulated fleet (0019): ``WS-*``
+      site, the ``sim``-kind ingest key in ``x-yf-ingest-key``, and
+      liveness defined as "the last write was not refused" — there is no
+      info RPC for a key, and none is needed: ``workspace_sim_stop``
+      revokes the key, RLS answers the next write with 401/403, and the
+      driver exits. Both modes refuse any site outside their namespace.
     """
 
     def __init__(self, api: SandboxAPI, site_id: str, token: str, *,
                  robots: int = 6, interval: float = 2.0,
                  time_scale: float = 5.0, seed: int | None = None,
                  deadline: datetime | None = None,
-                 history_every: int = 3, check_every: int = 15) -> None:
-        if not is_demo_site(site_id):
+                 history_every: int = 3, check_every: int = 15,
+                 auth: str = AUTH_DEMO) -> None:
+        if auth not in AUTH_MODES:
             raise SandboxError(
-                f"SandboxDriver: refusing to drive non-demo site {site_id!r} "
-                "— sandbox sites are DEMO-<hex>")
-        if not valid_token(token):
-            raise SandboxError(
-                "SandboxDriver: demo token is missing or malformed")
+                f"SandboxDriver: unknown --auth {auth!r} (expected one of "
+                f"{', '.join(AUTH_MODES)})")
+        if auth == AUTH_INGEST:
+            if not is_workspace_site(site_id):
+                raise SandboxError(
+                    f"SandboxDriver: refusing to drive non-workspace site "
+                    f"{site_id!r} with an ingest key — workspace sites are "
+                    "WS-<8 hex>")
+            if not valid_ingest_key(token):
+                raise SandboxError(
+                    "SandboxDriver: ingest key is missing or malformed")
+        else:
+            if not is_demo_site(site_id):
+                raise SandboxError(
+                    f"SandboxDriver: refusing to drive non-demo site {site_id!r} "
+                    "— sandbox sites are DEMO-<hex>")
+            if not valid_token(token):
+                raise SandboxError(
+                    "SandboxDriver: demo token is missing or malformed")
         self.api = api
         self.site = site_id
         self.token = token
+        self.auth = auth
+        #: Ingest mode only: set when RLS refused a write (401/403). That is
+        #: how a revoked key — the workspace's "stop" button — reaches us.
+        self.refused = False
         self.robots = max(int(robots), 1)
         self.interval = max(float(interval), 0.0)
         self.time_scale = max(float(time_scale), 1.0)
@@ -1062,8 +1195,18 @@ class SandboxDriver:
         return sim
 
     def robot_id(self, i: int) -> str:
-        """The id ``demo_mint_session`` already seeded: ``<site>-R01``."""
+        """The id ``demo_mint_session`` already seeded: ``<site>-R01``.
+
+        The same shape in a workspace (``WS-1a2b3c4d-R01``), which is the
+        namespacing docs/WORKSPACES.md promises the console it can strip.
+        """
         return f"{self.site}-R{i:02d}"
+
+    def _creds(self) -> dict[str, str]:
+        """The per-call credential kwargs for :class:`SandboxAPI`."""
+        if self.auth == AUTH_INGEST:
+            return {"ingest_key": self.token}
+        return {"token": self.token}
 
     # -- continuing from the fleet the visitor was handed -------------------
 
@@ -1083,8 +1226,10 @@ class SandboxDriver:
         Returns how many robots were adopted.
         """
         try:
-            rows = read_sandbox_robots(self.api, self.token,
-                                       limit=max(self.robots, 1) + 10)
+            rows = read_sandbox_robots(
+                self.api, self.token if self.auth == AUTH_DEMO else None,
+                limit=max(self.robots, 1) + 10,
+                ingest_key=self.token if self.auth == AUTH_INGEST else None)
         except SandboxError:
             return 0
         by_id = {str(r.get("id")): r for r in rows}
@@ -1188,7 +1333,7 @@ class SandboxDriver:
             rows = [{k: v for k, v in r.items() if k != "tasks_done"}
                     for r in rows]
         try:
-            self.api.write("robot_telemetry", rows, token=self.token)
+            self.api.write("robot_telemetry", rows, **self._creds())
         except SandboxError as exc:
             if self.telemetry_has_tasks_done and (
                     exc.code == "PGRST204" or "tasks_done" in exc.message):
@@ -1198,31 +1343,47 @@ class SandboxDriver:
             raise
 
     def tick_once(self) -> dict[str, int]:
-        """Advance the sandbox fleet once and publish it. Returns row counts."""
+        """Advance the fleet once and publish it. Returns row counts.
+
+        A write refused by RLS (401/403) is remembered in :attr:`refused`
+        before it propagates: in ingest mode that is the only signal that
+        the workspace's key was revoked or expired.
+        """
         dt = self.interval * self.time_scale if self.interval > 0 else self.time_scale
         out = self.sim.tick(dt_s=dt)
         self.ticks += 1
         rows = self._rows(out)
-        self.api.write("robots", rows["robots"], on_conflict="id", merge=True,
-                       token=self.token)
-        if rows["alerts"]:
-            self.api.write("alerts", rows["alerts"], on_conflict="id",
-                           merge=False, token=self.token)
-        if rows["incidents"]:
-            self.api.write("incidents", rows["incidents"], on_conflict="id",
-                           merge=False, token=self.token)
-        if rows["missions"]:
-            self.api.write("missions", rows["missions"], on_conflict="id",
-                           merge=True, token=self.token)
-        self._write_telemetry(rows["robot_telemetry"])
+        creds = self._creds()
+        try:
+            self.api.write("robots", rows["robots"], on_conflict="id",
+                           merge=True, **creds)
+            if rows["alerts"]:
+                self.api.write("alerts", rows["alerts"], on_conflict="id",
+                               merge=False, **creds)
+            if rows["incidents"]:
+                self.api.write("incidents", rows["incidents"], on_conflict="id",
+                               merge=False, **creds)
+            if rows["missions"]:
+                self.api.write("missions", rows["missions"], on_conflict="id",
+                               merge=True, **creds)
+            self._write_telemetry(rows["robot_telemetry"])
+        except SandboxError as exc:
+            if exc.status in (401, 403):
+                self.refused = True
+            raise
         return {k: len(v) for k, v in rows.items()}
 
     def session_live(self) -> bool:
-        """Ask the backend whether this sandbox still exists.
+        """Ask whether this site's credential is still good.
 
-        ``demo_session_info`` never raises, so an ended sandbox is a normal
-        answer — the driver exits quietly instead of hammering a dead site.
+        Demo: ``demo_session_info`` never raises, so an ended sandbox is a
+        normal answer — the driver exits quietly instead of hammering a
+        dead site. Ingest: there is no info RPC for a key, and the honest
+        answer is whether the backend last accepted our writes — a revoked
+        or expired key makes RLS refuse, which :meth:`tick_once` records.
         """
+        if self.auth == AUTH_INGEST:
+            return not self.refused
         try:
             return bool(self.api.info(self.token).get("live"))
         except SandboxError:
@@ -1263,23 +1424,73 @@ class SandboxDriver:
 # Spawning the driver as a child process
 # --------------------------------------------------------------------------
 
-def _spawn_driver(*, base_url: str, key: str, session: SandboxSession,
+@dataclass
+class DriverSession:
+    """What a workspace simulator needs to start (0019).
+
+    The ingest-key analogue of :class:`SandboxSession`: ``token`` is the
+    ``sim``-kind key ``workspace_sim_start`` minted, ``site_id`` its
+    ``WS-*`` workspace. Validated on construction for the same reason
+    :meth:`SandboxSession.from_rpc` validates — a reply that does not carry
+    a well-formed key and a workspace site must never become write traffic.
+    """
+
+    site_id: str
+    token: str
+    expires_at: str | None = None
+    robots: int = 0
+
+    @classmethod
+    def from_rpc(cls, payload: Any) -> "DriverSession":
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            raise SandboxError(
+                f"workspace_sim_start: unexpected reply {payload!r}")
+        key, site = payload.get("key"), payload.get("site_id")
+        if not valid_ingest_key(key):
+            raise SandboxError(
+                "workspace_sim_start: reply carried no usable ingest key")
+        if not is_workspace_site(site):
+            raise SandboxError(
+                f"workspace_sim_start: refusing a non-workspace site {site!r} "
+                "— the workspace site namespace is WS-<8 hex>")
+        return cls(site_id=site, token=key,
+                   expires_at=payload.get("expires_at"),
+                   robots=int(payload.get("robots") or 0))
+
+    @property
+    def expires(self) -> datetime | None:
+        return _parse_ts(self.expires_at)
+
+
+def _spawn_driver(*, base_url: str, key: str, session: Any,
                   robots: int, interval: float,
-                  python: str | None = None) -> int:
+                  python: str | None = None,
+                  auth: str = AUTH_DEMO) -> int:
     """Start ``yantraops sandbox-drive`` detached; return its pid.
 
-    The token goes through the environment, never argv: ``/proc/*/cmdline``
-    is world-readable on a normal Linux box and this is a bearer credential.
+    ``session`` is a :class:`SandboxSession` (demo) or a
+    :class:`DriverSession` (ingest) — anything with ``site_id``, ``token``
+    and ``expires_at``. The credential goes through the environment, never
+    argv: ``/proc/*/cmdline`` is world-readable on a normal Linux box and
+    both a demo token and an ingest key are bearer credentials. Which
+    variable carries it follows ``auth``, and the other is scrubbed so a
+    workspace driver can never inherit a stray demo token from the door's
+    own environment (or vice versa).
     """
+    if auth not in AUTH_MODES:
+        raise SandboxError(f"_spawn_driver: unknown auth mode {auth!r}")
     cmd = [python or sys.executable, "-m", "yantraops", "sandbox-drive",
            "--url", base_url, "--key", key,
            "--site", session.site_id,
+           "--auth", auth,
            "--robots", str(robots),
            "--interval", str(interval)]
     if session.expires_at:
         cmd += ["--until", str(session.expires_at)]
     env = dict(os.environ)
-    env[DEMO_TOKEN_ENV] = session.token
+    env.pop(DEMO_TOKEN_ENV, None)
+    env.pop(INGEST_KEY_ENV, None)
+    env[INGEST_KEY_ENV if auth == AUTH_INGEST else DEMO_TOKEN_ENV] = session.token
     env.setdefault("YANTRA_LOG_LEVEL", "WARNING")
     proc = subprocess.Popen(
         cmd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -1332,7 +1543,9 @@ def mint_sandbox(base_url: str, key: str, *, ttl: int | None = None,
     registry = SandboxRegistry(state_file)
     registry.sweep()                       # dead sandboxes never hold a slot
     ceiling = resolve_max_live(max_live)
-    live = registry.live_count()
+    # Workspace simulators (0019) have their own ceiling and never occupy
+    # a sandbox slot — see DEFAULT_WORKSPACE_MAX_LIVE.
+    live = registry.live_count(kind=KIND_DEMO)
     owned = api is None
     api = api or SandboxAPI(base_url, key)
     try:
@@ -1388,7 +1601,7 @@ def mint_sandbox(base_url: str, key: str, *, ttl: int | None = None,
 
         return dict(session.redacted(), console_url=console_url,
                     pid=pid, seeded=seeded, warnings=warnings,
-                    live_on_this_box=registry.live_count(),
+                    live_on_this_box=registry.live_count(kind=KIND_DEMO),
                     max_live=ceiling)
     finally:
         if owned:
@@ -1502,21 +1715,26 @@ def run_sandbox_list(base_url: str, key: str, *,
               "seconds_remaining": r.seconds_remaining(),
               "expired": r.expired(), "pid": r.pid,
               "sim_running": r.sim_running(), "origin": r.origin,
-              "robots": r.robots, "console_url": r.console_url}
+              "robots": r.robots, "console_url": r.console_url,
+              "kind": r.kind}
              for r in records]
     payload: dict[str, Any] = {
         "local": local, "max_live": ceiling,
         "live_on_this_box": sum(1 for r in local if not r["expired"]),
+        "workspace_live": sum(1 for r in local
+                              if not r["expired"] and r["kind"] == KIND_WORKSPACE),
+        "workspace_max_live": resolve_workspace_max_live(),
     }
-    lines = [f"  {len(local)} sandbox(es) on this box "
-             f"({payload['live_on_this_box']} live, ceiling {ceiling})"]
+    lines = [f"  {len(local)} simulator(s) on this box "
+             f"({payload['live_on_this_box']} live, sandbox ceiling {ceiling}, "
+             f"workspace ceiling {payload['workspace_max_live']})"]
     for row in local:
         state = ("expired" if row["expired"]
                  else f"{row['seconds_remaining'] // 60}m left")
         sim = (f"pid {row['pid']}" + ("" if row["sim_running"] else " (dead)")
                if row["pid"] else "no sim")
         lines.append(f"  {row['site_id']:<22}{state:<12}{sim:<18}"
-                     f"{row['console_url'] or ''}")
+                     f"{row['console_url'] or row['kind']}")
     exit_code = EXIT_OK
     if remote:
         owned = api is None
@@ -1540,18 +1758,27 @@ def run_sandbox_drive(base_url: str, key: str, site: str, *,
                       token: str | None = None, robots: int = 6,
                       interval: float = 2.0, until: str | None = None,
                       ticks: int = 0, api: SandboxAPI | None = None,
-                      stop: threading.Event | None = None) -> int:
-    """``sandbox-drive`` — move one sandbox's fleet until its TTL runs out.
+                      stop: threading.Event | None = None,
+                      auth: str = AUTH_DEMO) -> int:
+    """``sandbox-drive`` — move one site's fleet until its TTL runs out.
 
-    Internal: ``sandbox-mint`` spawns this. It reads the demo token from
-    :data:`DEMO_TOKEN_ENV` so the credential never appears in ``ps``.
+    Internal: ``sandbox-mint`` (demo) and the workspace door (ingest)
+    spawn this. The credential is read from :data:`DEMO_TOKEN_ENV` or
+    :data:`INGEST_KEY_ENV` according to ``auth``, so it never appears in
+    ``ps``.
     """
-    token = token or os.environ.get(DEMO_TOKEN_ENV) or ""
+    if auth not in AUTH_MODES:
+        print(f"yantraops: sandbox-drive: unknown --auth {auth!r}",
+              file=sys.stderr)
+        return EXIT_ERROR
+    env_var = INGEST_KEY_ENV if auth == AUTH_INGEST else DEMO_TOKEN_ENV
+    token = token or os.environ.get(env_var) or ""
     owned = api is None
     api = api or SandboxAPI(base_url, key)
     try:
         driver = SandboxDriver(api, site, token, robots=robots,
-                               interval=interval, deadline=_parse_ts(until))
+                               interval=interval, deadline=_parse_ts(until),
+                               auth=auth)
         # The visitor may already be looking at this fleet. Continue from
         # where it stands rather than teleporting it to the simulator's own
         # starting layout on tick one.

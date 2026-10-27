@@ -247,3 +247,27 @@ And give it a unique `<title>`, a unique `<meta name="description">`, its own
 `canonical`, `og:*` and `twitter:*` tags, and a `BreadcrumbList` — then add
 the new file to the placeholder tables above so the next person replacing the
 domain does not miss it.
+
+## v0.13 — the hosted-platform redesign
+
+`index.html` was rebuilt around three doors, in order of commitment:
+`/console/#demo` (the console on mock data, instant, no login),
+`POST /api/demo/session` (the throwaway live sandbox — unchanged, still a
+plain `<form>` enhanced by `assets/demo.js`, now inside `#demo-live`), and
+`/console/#signup` (a free Yantrika Cloud workspace). The `#hash` form is
+deliberate: nginx's bare-`/console/` redirect appends the backend params
+itself and would drop a `?query`, while browsers carry the fragment across
+the 302 — the console reads `#demo`, `#signup` and `#signin` at boot.
+
+New pages: `pricing.html` (free beta / planned team tier / self-hosted —
+nothing is sold, every row is sourced from `docs/WORKSPACES.md`) and
+`integrations.html` (VDA 5050 bridge, REST, Python, simulator, MCP, alerts
+out, commands in, ingest keys — the same snippets the console renders with
+real values). `assets/screens/*.webp` are real console screenshots captured
+in demo mode (1600 px wide, WebP); regenerate them after a console change
+with a Playwright script like the one in the v0.13 commit message. The
+product-shot switcher and the snippet copy buttons live in `assets/main.js`.
+
+The nav and footer were rebuilt on every page (Product · Integrations ·
+Pricing · VDA 5050 Test · Security · Docs · GitHub · Sign in · Start free).
+The "no hosted SaaS" FAQ answer is gone: there is one now.

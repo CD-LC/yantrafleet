@@ -21,6 +21,7 @@ from .grounding import (
 from .llm import CompletionFn, LLMError, tier1_answer, tier2_answer
 from .offline import OfflineEngine
 from .settings_sync import SettingsSync
+from .scope import current_site, request_scope
 from .tools import Toolbox, ToolResult
 from .transport import Transport, TransportError
 
@@ -76,8 +77,11 @@ class CopilotService:
         # "None means no wiring, fall back to the value frozen at process
         # start" shape as settings_sync above.
         self.config_sync = config_sync
+        # The site is read from the per-request scope (scope.py) when the
+        # toolbox is built, so one factory serves every concurrent asker.
         self._toolbox_factory: Callable[[], Toolbox] = lambda: Toolbox(
-            transport=self.transport, row_limit=settings.tool_row_limit
+            transport=self.transport, row_limit=settings.tool_row_limit,
+            site=current_site(),
         )
         self._offline = OfflineEngine(
             self._toolbox_factory,
@@ -124,8 +128,20 @@ class CopilotService:
     def llm_available(self) -> bool:
         return self._current_model() is not None
 
-    def ask(self, question: str) -> Answer:
-        """Answer a question, degrading through the tiers as needed."""
+    def ask(self, question: str, site: str | None = None,
+            user_token: str | None = None,
+            demo_token: str | None = None) -> Answer:
+        """Answer a question, degrading through the tiers as needed.
+
+        ``site`` scopes every data read to one site; ``user_token`` /
+        ``demo_token`` are the asker's own credentials, forwarded to
+        PostgREST so the copilot reads AS the asker (see scope.py). All
+        three default to None: behaviour is then exactly as before.
+        """
+        with request_scope(site, user_token, demo_token):
+            return self._ask(question)
+
+    def _ask(self, question: str) -> Answer:
         model = self._current_model()
         if model is None:
             return self._tier3(question)

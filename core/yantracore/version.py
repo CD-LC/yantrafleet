@@ -6,4 +6,4 @@ bump it here; the console and academy each carry a hardcoded ``YF_VERSION``
 constant at the top of their script that must be kept in sync with this
 value (documented at each constant).
 """
-__version__ = "0.12.1"
+__version__ = "0.13.0"

@@ -311,7 +311,7 @@ def test_cmd_robot_inserts_pending_command(page: Page, console_url: str, fake) -
                     for r in rows(store, "commands")),
         "a pending commands row for AMR-02/pause")
     row = next(r for r in rows(store, "commands") if r.get("robot_id") == "AMR-02")
-    assert row["requested_by"] == "console:PN"
+    assert row["requested_by"] == "console:anon"   # v0.13: anonymous requester label
 
 
 def test_approvals_card_renders_and_approve_patches(

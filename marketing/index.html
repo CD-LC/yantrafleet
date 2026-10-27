@@ -1,53 +1,52 @@
 <!doctype html>
 <!-- ================================================================
-  Yantrika MARKETING SITE — Home / Landing
+  Yantrika MARKETING SITE — Home / Landing (v0.13)
   ================================================================
   Plain static HTML/CSS/JS, no build step, no framework — consistent
   with the rest of this repo (console/, academy/, docs/). Shared
   styling lives in assets/styles.css; scripts are assets/main.js (a
-  mobile-nav toggle) and assets/demo.js (progressive enhancement for
-  the "Try it with a live fleet" button — the button works with that
-  script blocked or absent, see the comment on the form itself).
+  mobile-nav toggle + the product-shot switcher) and assets/demo.js
+  (progressive enhancement for the live-sandbox button — the form
+  works with that script blocked or absent, see the comment on it).
 
-  PLACEHOLDERS TO REPLACE BEFORE GOING LIVE (see marketing/README.md
-  for the complete list — it covers every file and every tag):
-    - https://yantrika.ai  → your real domain, everywhere
-      it appears (canonical, og:url, og:image, twitter:image, JSON-LD
-      url/@id fields, sitemap.xml, robots.txt)
-    - https://github.com/punith-naga/yantrafleet → your real
-      GitHub repo URL (same placeholder convention already used in
-      deploy/aws/user-data.sh and deploy/azure/custom-data.sh)
+  v0.13 positioning: Yantrika is open source AND hosted. The three
+  doors on this page, in order of commitment:
+    1. /console/#demo    the console on mock data — instant, no login
+    2. /api/demo/session a throwaway LIVE sandbox fleet — no signup
+    3. /console/#signup  a free Yantrika Cloud account → own workspace
+  (#hash, not ?query, because nginx's bare-/console/ redirect appends
+  the backend params itself and would drop a query string; browsers
+  carry the fragment across the 302.)
 
   Every factual claim on this page is sourced from README.md,
-  docs/SECURITY.md, docs/COMPLIANCE.md, TEST-REPORT.md,
-  tools/conformance/README.md, or ops/yantraops/sandbox_http.py. No
-  pricing, no customer logos, no testimonials, no usage numbers —
-  none of that exists in the project, so none is invented here.
+  TEST-REPORT.md, docs/SECURITY.md, docs/COMPLIANCE.md,
+  docs/WORKSPACES.md, tools/conformance/README.md, or the code. No
+  customer logos, no testimonials, no invented usage numbers.
   ================================================================ -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="google-site-verification" content="t3bB6eJFpvC6oOMpik8Ajpeq1m-2UUTEOANdqkt1Sks" />
-<title>Yantrika — Open-Source AMR Fleet Management (VDA 5050)</title>
+<title>Yantrika — Fleet operations for autonomous robots. Open source, hosted free.</title>
 <link rel="icon" href="/assets/brand/favicon.ico" sizes="any">
 <link rel="icon" href="/assets/brand/icon-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/brand/icon-180.png">
-<meta name="description" content="Open-source, self-hosted fleet software for multi-vendor AMR fleets. VDA 5050 v2.1, human-approved commands, incident detection. MIT licensed.">
-<link rel="canonical" href="https://yantrika.ai/index.html">
-<meta name="theme-color" content="#2563c9">
+<meta name="description" content="Yantrika runs multi-vendor AMR fleets: VDA 5050 connectivity, live console, human-approved commands, incident detection, predictive maintenance and a grounded AI copilot. Open source (MIT) and hosted — see the demo without logging in, or create a free workspace.">
+<link rel="canonical" href="https://yantrika.ai/">
+<meta name="theme-color" content="#0d0d0d">
 <meta property="og:site_name" content="Yantrika">
-<meta property="og:title" content="Yantrika — Open-Source AMR Fleet Management (VDA 5050)">
-<meta property="og:description" content="Open-source, self-hosted fleet software for multi-vendor AMR fleets. VDA 5050 v2.1, human-approved commands, incident detection, predictive maintenance. MIT licensed — try a live fleet with no signup.">
+<meta property="og:title" content="Yantrika — Fleet operations for autonomous robots">
+<meta property="og:description" content="Open-source fleet operations for multi-vendor AMR fleets, hosted free. VDA 5050, human-approved commands, incident detection, predictive maintenance, AI copilot. See the demo with no login.">
 <meta property="og:type" content="website">
-<meta property="og:url" content="https://yantrika.ai/index.html">
+<meta property="og:url" content="https://yantrika.ai/">
 <meta property="og:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Yantrika — open-source AMR fleet operations, VDA 5050 v2.1, MIT licensed.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Yantrika — Open-Source AMR Fleet Management (VDA 5050)">
-<meta name="twitter:description" content="Open-source, self-hosted fleet software for multi-vendor AMR fleets. VDA 5050 v2.1, human-approved commands, incident detection. MIT licensed.">
+<meta name="twitter:title" content="Yantrika — Fleet operations for autonomous robots">
+<meta name="twitter:description" content="Open source and hosted. VDA 5050, approvals, incidents, predictive maintenance, AI copilot. Demo with no login.">
 <meta name="twitter:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
 <link rel="stylesheet" href="assets/styles.css">
 <script type="application/ld+json">
@@ -59,14 +58,11 @@
       "@id": "https://yantrika.ai/#website",
       "url": "https://yantrika.ai/",
       "name": "Yantrika",
-      "description": "Open-source, self-hosted fleet-operations software for multi-vendor AMR fleets.",
+      "description": "Open-source, hosted fleet-operations platform for multi-vendor autonomous mobile robot fleets.",
       "inLanguage": "en",
       "potentialAction": {
         "@type": "SearchAction",
-        "target": {
-          "@type": "EntryPoint",
-          "urlTemplate": "https://yantrika.ai/search.html?q={search_term_string}"
-        },
+        "target": { "@type": "EntryPoint", "urlTemplate": "https://yantrika.ai/search.html?q={search_term_string}" },
         "query-input": "required name=search_term_string"
       }
     },
@@ -76,72 +72,39 @@
       "name": "Yantrika",
       "applicationCategory": "BusinessApplication",
       "applicationSubCategory": "Autonomous mobile robot (AMR) fleet management",
-      "operatingSystem": "Linux, Windows, macOS (Docker)",
-      "softwareVersion": "0.12.1",
+      "operatingSystem": "Web, Linux, Windows, macOS (Docker)",
+      "softwareVersion": "0.13.0",
       "license": "https://opensource.org/licenses/MIT",
       "isAccessibleForFree": true,
       "codeRepository": "https://github.com/punith-naga/yantrafleet",
-      "url": "https://yantrika.ai/index.html",
-      "description": "Open-source, self-hosted fleet-operations platform for multi-vendor AMR fleets. Speaks VDA 5050 v2.1, provides human-approved command gating, automatic incident detection, predictive maintenance, and a grounded AI copilot.",
+      "url": "https://yantrika.ai/",
+      "description": "Fleet-operations platform for multi-vendor AMR fleets. Speaks VDA 5050 v2.1, provides human-approved command gating, automatic incident detection, predictive maintenance, a grounded AI copilot, and self-serve cloud workspaces. Open source under MIT; hosted at yantrika.ai.",
       "featureList": [
         "VDA 5050 v2.1 multi-vendor robot connectivity over MQTT",
         "Live fleet console with map, alerts and incident replay",
         "Human-in-the-loop command approval with a full audit trail",
         "Automatic incident detection with dedup and flap handling",
-        "Predictive maintenance heuristics with explanations",
+        "Predictive maintenance findings with RUL and confidence",
         "Grounded AI copilot over live fleet data",
+        "Self-serve cloud workspaces with ingest keys and role-based access",
         "Free VDA 5050 conformance tester (52 checks)"
       ],
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      }
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
     },
     {
       "@type": "FAQPage",
       "@id": "https://yantrika.ai/#faq",
       "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "Is there a hosted SaaS version of Yantrika?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "No. Yantrika is self-hosted software you run on your own infrastructure against your own database, under the MIT license. The live demo on this site is a throwaway sandbox that expires on its own; it is not a hosted product."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Does Yantrika work with robots from more than one vendor?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "That is the point of it. Robots talk to Yantrika over VDA 5050 v2.1, the open vendor-neutral MQTT protocol for AMR fleet communication, so any vehicle that implements the standard can be driven from the same console. The bundled simulator models a 10-robot fleet across 3 simulated vendors to exercise that path without hardware."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "Do I need an account or an email address to try it?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "No. The Try it button mints a throwaway sandbox with its own site id and a small simulated fleet, and drops you straight into the console. It collects nothing about you, and the sandbox and its data are deleted when its time is up."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "What does Yantrika cost?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Nothing. It is MIT licensed open-source software. There is no paid tier, no enterprise edition, and no feature held back behind a sales call. Your costs are whatever infrastructure you choose to run it on."
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "How do I check whether my robots actually implement VDA 5050 correctly?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "Run yantra-conform, the conformance tester that ships with Yantrika. It grades a fleet against 52 checks drawn from VDA 5050 v2.1 and writes a single HTML report naming the clause, what was expected, what your vehicle actually did, and how to fix it. It is a command-line tool that runs on your machine against your broker, and it is free."
-          }
-        }
+        { "@type": "Question", "name": "Is there a hosted version of Yantrika?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Yantrika Cloud at yantrika.ai is the hosted platform: create a free account and you get your own workspace with ingest keys to connect robots, a one-click simulated fleet, and role-based seats for your team. The same code is open source under MIT, so you can also self-host it on your own infrastructure." } },
+        { "@type": "Question", "name": "Can I see it without creating an account?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yes, two ways. The demo opens the full console on scripted mock data instantly with no login. The live sandbox mints a throwaway site with a real simulated fleet for about an hour, also with no signup or email." } },
+        { "@type": "Question", "name": "Does Yantrika work with robots from more than one vendor?",
+          "acceptedAnswer": { "@type": "Answer", "text": "That is the point of it. Robots talk to Yantrika over VDA 5050 v2.1, the open vendor-neutral MQTT protocol for AMR fleet communication, so any vehicle that implements the standard can be driven from the same console. Anything else can publish over plain REST." } },
+        { "@type": "Question", "name": "What does Yantrika cost?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Yantrika Cloud is free while in beta, and the software is MIT-licensed open source with no paid tier, no enterprise edition and no feature held back. Self-hosting costs whatever infrastructure you choose to run it on." } },
+        { "@type": "Question", "name": "How do I check whether my robots actually implement VDA 5050 correctly?",
+          "acceptedAnswer": { "@type": "Answer", "text": "Run yantra-conform, the free conformance tester that ships with Yantrika. It grades a fleet against 52 checks drawn from VDA 5050 v2.1 and writes a single HTML report naming the clause, what was expected, what your vehicle actually did, and how to fix it." } }
       ]
     }
   ]
@@ -157,214 +120,300 @@
     <button class="navtoggle" aria-expanded="false" aria-label="Toggle navigation">☰</button>
     <nav class="top">
       <a class="on" href="index.html">Home</a>
-      <a href="about.html">About</a>
-      <a href="features.html">Features</a>
+      <a href="features.html">Product</a>
+      <a href="integrations.html">Integrations</a>
+      <a href="pricing.html">Pricing</a>
       <a href="vda-5050-conformance-test.html">VDA 5050 Test</a>
       <a href="security.html">Security</a>
       <a href="docs.html">Docs</a>
-      <a href="get-involved.html">Get Involved</a>
-      <a href="changelog.html">Changelog</a>
-      <a class="signin" href="/console/">Sign in</a>
-      <a class="cta" href="https://github.com/punith-naga/yantrafleet">View on GitHub</a>
+      <a class="ghlink" href="https://github.com/punith-naga/yantrafleet" title="Source on GitHub"><svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>GitHub</a>
+      <a class="signin" href="/console/#signin">Sign in</a>
+      <a class="cta" href="/console/#signup">Start free</a>
     </nav>
   </div>
 </header>
 
 <main id="main">
 
-  <section class="hero">
-    <div class="wrap">
-      <p class="kicker">Open source · MIT licensed · v0.12.1</p>
-      <h1>The operations layer for your robot fleet.</h1>
-      <p class="lede">Yantrika is an open-source, end-to-end fleet-operations platform for multi-vendor AMR (autonomous mobile robot) fleets. Robots speak VDA 5050 v2.1 over MQTT; Yantrika gives you a live console, human-approved command gating, automatic incident detection, predictive maintenance, real alert delivery, and an AI copilot grounded in your fleet's actual data — self-hosted, on your own infrastructure.</p>
-
-      <!-- ============================================================
-        THE PRIMARY CALL TO ACTION.
-
-        Baseline is a real <form method="post">. No JavaScript, no
-        fetch, no fallback path to get wrong: the browser posts the
-        form, ops/yantraops/sandbox_http.py sees "text/html" in the
-        Accept header and answers 303 with the console URL in
-        Location:, and the browser follows it into a running fleet.
-        That is the whole flow with scripting turned off.
-
-        assets/demo.js then enhances it: it asks GET /api/demo/limits
-        whether the demo is available at all and hides this block if
-        not, and it intercepts the submit so a 429/503 becomes a
-        sentence a human can read instead of a browser error page. If
-        that script is blocked, absent, or throws, the form underneath
-        is untouched and still works.
-
-        The form deliberately posts NO fields. The door never reads a
-        request body — TTL, fleet size and site id are operator
-        configuration, not caller input (see the module docstring in
-        sandbox_http.py). Adding an input here would create the
-        expectation that it does.
-      ============================================================ -->
-      <div class="demo" id="demo" data-demo-state="ready">
-        <form class="demoform" method="post" action="/api/demo/session">
-          <button class="btn primary big" type="submit" id="demo-go">
-            Try it with a live fleet — no signup, no email
-          </button>
-        </form>
-        <p class="demonote" id="demo-note">
-          Starts a private sandbox with its own simulated fleet and drops you
-          straight into the console. Nothing to install, nothing to fill in.
-          It expires on its own and takes its data with it.
-        </p>
-        <!-- aria-live so the enhanced path announces refusals to screen
-             readers; empty (and display:none via :empty) until it has
-             something real to say. -->
-        <p class="demostatus" id="demo-status" role="status" aria-live="polite"></p>
+  <!-- ============================== HERO ============================== -->
+  <section class="hero dark">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="kicker">Open source · MIT · Hosted free while in beta · v0.13</p>
+        <h1>The operations layer for <em>every robot</em> on your floor.</h1>
+        <p class="lede">Yantrika runs multi-vendor AMR fleets from one console: VDA 5050 connectivity, human-approved commands, automatic incidents, predictive maintenance, real alert delivery and an AI copilot that only ever cites your fleet's own data. Use it hosted, or run the same code yourself.</p>
+        <div class="actions">
+          <a class="btn glow big" href="/console/#demo" id="cta-demo">See the live demo — no login</a>
+          <a class="btn primary big" href="/console/#signup" id="cta-signup">Create free workspace</a>
+        </div>
+        <p class="sub-cta">Prefer a real fleet? <a href="#demo-live">Spin up a throwaway live sandbox</a> — no signup, it deletes itself after an hour. Or <a href="#selfhost">self-host in three commands</a>.</p>
+        <p class="proofline" style="margin-top:22px"><strong>10 automated test suites, 600+ tests, all passing</strong> · VDA 5050 v2.1 · Postgres row-level security · 52-check conformance tester · no tracking on this site.</p>
       </div>
 
-      <div class="actions">
-        <a class="btn secondary" href="vda-5050-conformance-test.html">Test your robots against VDA 5050 →</a>
-        <a class="btn secondary" href="https://github.com/punith-naga/yantrafleet">View on GitHub</a>
-        <a class="btn secondary" href="docs.html">Read the docs</a>
+      <!-- Animated floor plan: a stylised version of the console's Live Ops
+           map. Pure SVG + SMIL animateMotion, no script, no video. -->
+      <div class="floor" aria-label="Animated illustration of robots moving across a warehouse floor plan with a live alert, a pending approval and a copilot answer">
+        <svg viewBox="0 0 600 380" role="img">
+          <defs>
+            <linearGradient id="lane" x1="0" x2="1"><stop offset="0" stop-color="#2a2a28"/><stop offset="1" stop-color="#323230"/></linearGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <!-- zones -->
+          <g font-family="system-ui,sans-serif" font-size="9" font-weight="700" letter-spacing=".08em" fill="#5b5a55">
+            <rect x="16" y="40" width="80" height="320" rx="8" fill="#191c22" stroke="#232322"/><text x="24" y="56">INBOUND</text>
+            <rect x="112" y="40" width="200" height="140" rx="8" fill="#17181c" stroke="#232322"/><text x="120" y="56">STORAGE A</text>
+            <rect x="112" y="200" width="200" height="160" rx="8" fill="#17181c" stroke="#232322"/><text x="120" y="216">STORAGE B</text>
+            <rect x="330" y="40" width="130" height="320" rx="8" fill="#191b18" stroke="#232322"/><text x="338" y="56">PACK</text>
+            <rect x="478" y="40" width="106" height="200" rx="8" fill="#191c22" stroke="#232322"/><text x="486" y="56">OUTBOUND</text>
+            <rect x="478" y="258" width="106" height="102" rx="8" fill="#141a14" stroke="#1f2a1f"/><text x="486" y="274" fill="#4f6b4f">CHARGE ⚡</text>
+          </g>
+          <!-- racks -->
+          <g fill="#26262a" stroke="#31313a">
+            <rect x="128" y="70" width="168" height="16" rx="3"/><rect x="128" y="104" width="168" height="16" rx="3"/><rect x="128" y="138" width="168" height="16" rx="3"/>
+            <rect x="128" y="232" width="168" height="16" rx="3"/><rect x="128" y="266" width="168" height="16" rx="3"/><rect x="128" y="300" width="168" height="16" rx="3"/><rect x="128" y="334" width="168" height="16" rx="3"/>
+            <rect x="344" y="72" width="44" height="26" rx="3"/><rect x="400" y="72" width="44" height="26" rx="3"/>
+            <rect x="344" y="130" width="44" height="26" rx="3"/><rect x="400" y="130" width="44" height="26" rx="3"/>
+            <rect x="344" y="188" width="44" height="26" rx="3"/><rect x="400" y="188" width="44" height="26" rx="3"/>
+            <rect x="344" y="246" width="44" height="26" rx="3"/><rect x="400" y="246" width="44" height="26" rx="3"/>
+            <rect x="344" y="304" width="44" height="26" rx="3"/><rect x="400" y="304" width="44" height="26" rx="3"/>
+          </g>
+          <!-- lanes -->
+          <g fill="none" stroke="url(#lane)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+            <path id="l1" d="M56 96 H120 V96 H318 V120 H336 V166 H452 V96 H520"/>
+            <path id="l2" d="M56 250 H120 V250 H318 V260 H336 V330 H452 V300 H520"/>
+            <path id="l3" d="M56 96 V330 H120 V330 H318 V318"/>
+            <path id="l4" d="M318 120 V318"/>
+            <path id="l5" d="M452 96 V330"/>
+            <path id="l6" d="M520 96 V300"/>
+          </g>
+          <!-- waypoint dots -->
+          <g fill="#3a3a38"><circle cx="120" cy="96" r="3"/><circle cx="318" cy="120" r="3"/><circle cx="318" cy="250" r="3"/><circle cx="452" cy="166" r="3"/><circle cx="452" cy="330" r="3"/><circle cx="520" cy="96" r="3"/><circle cx="520" cy="300" r="3"/><circle cx="120" cy="330" r="3"/></g>
+
+          <!-- robots -->
+          <g font-family="system-ui,sans-serif" font-size="7.5" font-weight="700" text-anchor="middle">
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">01</text>
+              <animateMotion dur="14s" repeatCount="indefinite" path="M56 96 H120 H318 V120 H336 V166 H452 V96 H520 V300 H452 V330 H318 V318 V250 H120 V330 H56 V96"/></g>
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">02</text>
+              <animateMotion dur="11s" begin="-3s" repeatCount="indefinite" path="M318 120 V250 H120 V330 H318 V318 H336 V330 H452 V166 H336 V120 Z"/></g>
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">03</text>
+              <animateMotion dur="9s" begin="-6s" repeatCount="indefinite" path="M452 96 V330 H520 V96 Z"/></g>
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">04</text>
+              <animateMotion dur="16s" begin="-9s" repeatCount="indefinite" path="M56 330 V96 H120 H318 V250 H120 V330 Z"/></g>
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">05</text>
+              <animateMotion dur="12s" begin="-1s" repeatCount="indefinite" path="M336 330 H452 V166 H336 V330"/></g>
+            <g><circle r="8" fill="#8f8f8a" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">06</text>
+              <animateMotion dur="13s" begin="-7s" repeatCount="indefinite" path="M120 96 H318 V120 H336 V166 H452 V330 H318 V250 H120 Z"/></g>
+            <!-- charging -->
+            <g transform="translate(520,300)"><circle r="8" fill="#c98500" stroke="#0d0d0d" stroke-width="2"/><text y="2.8" fill="#0d0d0d">09</text></g>
+            <!-- faulted, pulsing -->
+            <g transform="translate(220,250)">
+              <circle r="14" fill="none" stroke="#d03b3b" stroke-width="1.5" opacity=".6"><animate attributeName="r" values="10;22" dur="1.6s" repeatCount="indefinite"/><animate attributeName="opacity" values=".7;0" dur="1.6s" repeatCount="indefinite"/></circle>
+              <circle r="8" fill="#d03b3b" stroke="#0d0d0d" stroke-width="2" filter="url(#glow)"/><text y="2.8" fill="#fff">07</text>
+            </g>
+          </g>
+        </svg>
+        <div class="hud">
+          <span class="chipd"><i style="background:#0ca30c"></i>Fleet health 86/100</span>
+          <span class="chipd"><i style="background:#3987e5"></i>LIVE · VDA 5050</span>
+        </div>
+        <div class="float alert"><b>Critical · 14:02</b>AMR-07 localization fault — stopped in Aisle B3<span class="mini ghost">Ack</span></div>
+        <div class="float approve"><b>Pending approval</b>E-STOP · AMR-07 · requested by operator<span class="mini">Approve</span><span class="mini ghost">Reject</span></div>
+        <div class="float copilot"><b>✦ Copilot</b>Throughput fell 18% after 14:02 — rack B3-04's reflector moved during replenishment.</div>
       </div>
-      <p class="proofline"><strong>10 automated test suites, 500+ tests, all passing</strong> — plus 188 more covering the conformance tester on its own. MIT license. Runs standalone or against your own Supabase/Postgres project.</p>
     </div>
+    <div class="strip" style="margin-top:56px"><div class="wrap">
+      <span><b>VDA 5050 v2.1</b> native</span>
+      <span><b>Postgres RLS</b> enforced roles</span>
+      <span><b>4 roles</b> operator → admin</span>
+      <span><b>52 checks</b> conformance tester</span>
+      <span><b>MCP</b> tools for AI agents</span>
+      <span><b>MIT</b> licensed</span>
+    </div></div>
   </section>
 
-  <section class="tight">
-    <div class="wrap">
-      <div class="quickstart">
-        <p class="kicker" style="margin-bottom:8px">Three commands, zero config</p>
-        <pre><code><span class="cmt"># Linux / macOS</span>
-<span class="dollar">$</span> git clone https://github.com/punith-naga/yantrafleet.git &amp;&amp; cd yantrafleet
-<span class="dollar">$</span> ./install.sh
-<span class="dollar">$</span> .venv/bin/python -m yantraops up --loopback</code></pre>
-        <p>That's the full platform — simulated 10-AMR fleet, automatic incident detection, predictive maintenance, notifications, and the Sarathi AI copilot — running against an embedded in-memory backend. No cloud account, no API keys, no physical robots required.</p>
-        <p class="platnote">Windows supported via <code>install.ps1</code> and a <a href="/docs/RUNBOOK-WINDOWS.md">PowerShell runbook</a>.</p>
-      </div>
-    </div>
-  </section>
-
+  <!-- ============================== PRODUCT TOUR ============================== -->
   <section>
     <div class="wrap">
-      <p class="kicker">What it does</p>
-      <h2>One shared data layer, five cooperating services.</h2>
-      <p class="lede">Robots — or Yantrika's own deterministic warehouse simulator — publish <a href="https://www.vda.de" target="_blank" rel="noopener">VDA 5050 v2.1</a> <code>state</code> messages over MQTT. A connector translates that standard protocol into a shared Postgres (Supabase) schema. Every other component — the console, the incident detector, the predictive-maintenance engine, the notifier, and the AI copilot — reads and writes that same schema, so what you see in the console is exactly what every other service is acting on.</p>
+      <p class="kicker">The console</p>
+      <h2>Everything an operations team needs, on one screen that is never empty.</h2>
+      <p class="lede">These are real screenshots of the console in demo mode — the same console you get the moment you sign up. Click a tab, or <a href="/console/#demo">open it yourself</a>.</p>
+      <div class="showcase" id="showcase">
+        <div class="tabs" role="tablist">
+          <button class="on" data-shot="overview" role="tab"><b>Overview</b><span>Health, throughput, top issues, live alerts, pending approvals.</span></button>
+          <button data-shot="liveops" role="tab"><b>Live Ops map</b><span>Every robot on the floor; click one for telemetry and actions.</span></button>
+          <button data-shot="incident" role="tab"><b>Incident replay</b><span>Scrub recorded telemetry around the event, with RCA and fix.</span></button>
+          <button data-shot="maint" role="tab"><b>Predictive maintenance</b><span>Motor-temp, battery and drivetrain trends with RUL and confidence.</span></button>
+          <button data-shot="analytics" role="tab"><b>Analytics &amp; SLA</b><span>Availability, MTTR, utilization and time lost by cause.</span></button>
+          <button data-shot="copilot" role="tab"><b>Sarathi copilot</b><span>Plain-language questions, evidence-cited answers, ⌘J.</span></button>
+          <button data-shot="connect" role="tab"><b>Connect robots</b><span>Ingest keys plus ready-to-paste bridge, REST, Python and MCP snippets.</span></button>
+        </div>
+        <div class="shot"><div class="bar"><i></i><i></i><i></i></div>
+          <img id="shot-img" src="assets/screens/console-overview.webp" width="1600" height="1000" alt="Yantrika console — Overview: fleet health 86/100, throughput chart with the 14:02 incident dip, top issues, live alerts and the fleet table" loading="eager">
+        </div>
+      </div>
+    </div>
+  </section>
 
+  <!-- ============================== TWO PATHS ============================== -->
+  <section class="tight" id="selfhost">
+    <div class="wrap">
+      <p class="kicker">Two ways to run it. One codebase.</p>
+      <h2>Hosted when you want speed. Self-hosted when you want control.</h2>
+      <div class="paths">
+        <div class="path cloud"><span class="tag">Free beta</span>
+          <h3>Yantrika Cloud</h3>
+          <p style="color:var(--muted);margin:0">Create an account; a private workspace exists before you finish reading this sentence.</p>
+          <ul>
+            <li>Your own site, admin role, team invites with four roles</li>
+            <li>Ingest keys — connect robots over VDA 5050 or REST in minutes</li>
+            <li>One-click simulated fleet so the console is never empty</li>
+            <li>Incidents, maintenance, notifier and copilot already running</li>
+            <li>Data isolated per workspace by Postgres row-level security</li>
+          </ul>
+          <div class="actions" style="margin:0"><a class="btn primary" href="/console/#signup">Create free workspace</a><a class="btn secondary" href="pricing.html">What's included →</a></div>
+        </div>
+        <div class="path">
+          <h3>Self-hosted</h3>
+          <p style="color:var(--muted);margin:0">The exact same platform, MIT licensed, on your laptop, your Docker host or your cloud account.</p>
+          <ul>
+            <li>Loopback mode: full stack, zero cloud, zero keys, offline</li>
+            <li>Your own Supabase or Postgres with ordered, checksummed migrations</li>
+            <li>Scripted EC2 and Azure deployments with HTTPS and Key Vault</li>
+            <li>Demo → hardened → RBAC posture, each an opt-in migration</li>
+            <li>Every component ships its own offline test suite</li>
+          </ul>
+          <div class="quickstart" style="padding:14px 16px;margin-top:4px">
+            <pre style="margin:0"><code><span class="dollar">$</span> git clone https://github.com/punith-naga/yantrafleet.git &amp;&amp; cd yantrafleet
+<span class="dollar">$</span> ./install.sh
+<span class="dollar">$</span> .venv/bin/python -m yantraops up --loopback</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== HOW IT WORKS ============================== -->
+  <section>
+    <div class="wrap">
+      <p class="kicker">How it works</p>
+      <h2>Robots in, decisions out — with a human in the loop.</h2>
+      <div class="steps">
+        <div class="step"><h3>Robots publish state</h3><p>Over <strong>VDA 5050 v2.1</strong> on MQTT, through <code>yantrabridge</code>; or over plain REST from anything that speaks HTTPS; or from the bundled deterministic simulator. Each writer holds an ingest key that can only touch its own site.</p></div>
+        <div class="step"><h3>Services act on one schema</h3><p>The detector opens and resolves incidents with idempotent ids and flap guards. The maintenance engine trends telemetry into findings with RUL and confidence. The notifier fans out to Slack, Discord, webhooks and WhatsApp.</p></div>
+        <div class="step"><h3>People stay in control</h3><p>Pause, send-to-charge and e-stop never execute directly — they queue for a manager's approval, go out as VDA 5050 instantActions, and land in an audit trail with who asked, who decided, and what happened.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== CAPABILITIES ============================== -->
+  <section class="tight">
+    <div class="wrap">
+      <p class="kicker">What you get</p>
+      <h2>Built like infrastructure, not a dashboard demo.</h2>
       <div class="grid">
-        <div class="card">
-          <span class="num">1</span>
-          <h3>Live fleet console</h3>
-          <p>Single-file web console (no build step): live map, per-robot detail, alerts, incidents with recorded-telemetry replay, and a mission board.</p>
-        </div>
-        <div class="card">
-          <span class="num">2</span>
-          <h3>Human approval gate</h3>
-          <p>Robot commands (pause, send-to-charge, e-stop) don't execute directly — they queue as <code>pending</code> rows that an operator approves or rejects, with a full audit trail of who requested and who decided.</p>
-        </div>
-        <div class="card">
-          <span class="num">3</span>
-          <h3>Automatic incident detection</h3>
-          <p>A detector polls robot state and opens/resolves incidents with deterministic, idempotent IDs, flap-window re-opening, and stale auto-resolve — PagerDuty-style dedup logic, running against your own data.</p>
-        </div>
-        <div class="card">
-          <span class="num">4</span>
-          <h3>Predictive maintenance</h3>
-          <p>Reads recent telemetry windows and flags drive-motor temperature trends, abnormal battery drain, and drivetrain speed decline before they become failures — each finding carries a human-readable explanation, an estimated remaining-useful-life, and a confidence score.</p>
-        </div>
-        <div class="card">
-          <span class="num">5</span>
-          <h3>Sarathi, the AI copilot</h3>
-          <p>Ask questions about your fleet in plain language; answers are grounded in your fleet's live data with cited sources, and gracefully degrade from LLM-backed to template-based answers if no LLM key is configured — it always works, it just gets smarter with a key.</p>
-        </div>
+        <div class="card"><span class="num">1</span><h3>Live fleet console</h3><p>Map, per-robot drawer, alerts with ISA-18.2 alarm budgets, missions, a command palette, a guided tour and a printable shift report. One HTML file, no build step.</p></div>
+        <div class="card"><span class="num">2</span><h3>Human approval gate</h3><p>Robot commands queue as pending rows; approving needs the manager role, enforced by a <code>SECURITY DEFINER</code> function in Postgres — not by the UI.</p></div>
+        <div class="card"><span class="num">3</span><h3>Incident detection &amp; replay</h3><p>PagerDuty-style lifecycle from telemetry; open an incident to scrub recorded position, battery and speed around the event.</p></div>
+        <div class="card"><span class="num">4</span><h3>Predictive maintenance</h3><p>Drive-motor temperature trends, abnormal battery drain and drivetrain decline become findings with a remaining-useful-life estimate and an action.</p></div>
+        <div class="card"><span class="num">5</span><h3>Sarathi, the AI copilot</h3><p>Answers from live rows with cited evidence; works offline on templates and gets smarter with an LLM key. Also exposed as MCP tools for Claude Desktop and other agents.</p></div>
+        <div class="card"><span class="num">6</span><h3>Roles, audit, security</h3><p>Four roles scoped per site, Supabase Auth, row-level security, signed webhooks, a live <code>audit-security</code> command and SOC 2 / ISO 27001 / EU AI Act mappings.</p></div>
+        <div class="card"><span class="num">7</span><h3>Operator academy</h3><p>Role tracks, quizzes and a live-verified checkride certification — practicals are checked against the real tables, not self-reported.</p></div>
+        <div class="card"><span class="num">8</span><h3>VDA 5050 conformance tester</h3><p>52 checks against v2.1 with a graded HTML report that names the clause, the expectation, what the vehicle did and how to fix it. Free, no account.</p></div>
       </div>
       <p style="margin-top:18px"><a href="features.html">See every feature in detail →</a></p>
     </div>
   </section>
 
-  <section class="tight">
+  <!-- ============================== INTEGRATIONS ============================== -->
+  <section>
     <div class="wrap">
-      <div class="callout">
-        <p class="kicker">Built on an open standard</p>
-        <p>Yantrika doesn't lock you into one robot vendor. It speaks <strong>VDA 5050 v2.1</strong>, the open, vendor-neutral protocol for AMR fleet communication — so it's built to sit above multiple robot brands on the same floor, not just one. The bundled simulator models a 10-robot fleet across 3 simulated vendors on an 8×5 warehouse grid to prove this out without hardware.</p>
-        <p style="margin-bottom:0">A protocol only helps if the vehicles actually implement it. Yantrika ships a <a href="vda-5050-conformance-test.html"><strong>free VDA 5050 conformance tester</strong></a> — 52 checks, a graded HTML report, no account and no sales call — so you can find out before the robots are on your floor.</p>
+      <p class="kicker">Ready to integrate</p>
+      <h2>Speaks the protocols your floor already uses.</h2>
+      <p class="lede">Nothing proprietary on the wire. Every path below is documented with copy-paste snippets inside the console and on the <a href="integrations.html">integrations page</a>.</p>
+      <div class="logos">
+        <div class="lg"><i>⇄</i>VDA 5050 v2.1<span>state · order · instantActions over MQTT</span></div>
+        <div class="lg"><i>{ }</i>REST API<span>PostgREST, any language, upsert rows</span></div>
+        <div class="lg"><i>🐍</i>Python<span>connector, simulator, sinks</span></div>
+        <div class="lg"><i>✦</i>MCP<span>fleet tools for AI agents</span></div>
+        <div class="lg"><i>⚑</i>Webhooks<span>Slack, Discord, HMAC-signed</span></div>
+        <div class="lg"><i>☏</i>WhatsApp<span>alerts and inbound ack / approve</span></div>
+        <div class="lg"><i>▤</i>MCAP / JSONL<span>replay recorded telemetry</span></div>
+        <div class="lg"><i>🐘</i>Postgres / Supabase<span>your database, your data</span></div>
       </div>
     </div>
   </section>
 
+  <!-- ============================== TRY WITHOUT SIGNUP ============================== -->
+  <section class="tight" id="demo-live">
+    <div class="wrap">
+      <div class="callout">
+        <p class="kicker">Try it before you sign up</p>
+        <h2 style="margin-bottom:6px">Two doors, no account behind either.</h2>
+        <div class="grid two" style="margin-top:16px">
+          <div class="card">
+            <h3>Demo with mock data</h3>
+            <p>The complete console on a scripted warehouse: a localization fault, an incident replay, a maintenance story, the copilot. Instant, nothing saved.</p>
+            <p style="margin-top:12px"><a class="btn primary" href="/console/#demo">Open the demo →</a></p>
+          </div>
+          <div class="card">
+            <h3>Live sandbox fleet</h3>
+            <!-- The primary live CTA. Baseline is a real <form method="post">;
+                 assets/demo.js only enhances it (hides it when the deployment
+                 has the sandbox off, turns 429/503 into sentences). The form
+                 deliberately posts NO fields — the door never reads a body. -->
+            <div class="demo" id="demo" data-demo-state="ready" style="margin:0">
+              <form class="demoform" method="post" action="/api/demo/session">
+                <button class="btn primary" type="submit" id="demo-go">Start a live sandbox — no signup, no email</button>
+              </form>
+              <p class="demonote" id="demo-note">A private throwaway site with its own simulated fleet, real rows, real incidents, a copilot grounded on them. It runs for about an hour, then deletes itself and its data.</p>
+              <p class="demostatus" id="demo-status" role="status" aria-live="polite"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== SECURITY ============================== -->
   <section>
     <div class="wrap">
-      <p class="kicker">Deploy it your way</p>
-      <h2>Self-hosted, on your own infrastructure.</h2>
       <div class="grid two">
-        <div class="card">
-          <h3>Try it locally in minutes</h3>
-          <p><code>install.sh</code> / <code>install.ps1</code> sets up a Python virtual environment and runs the full stack against an embedded in-memory backend. Zero cloud dependency.</p>
+        <div>
+          <p class="kicker">Security &amp; isolation</p>
+          <h2>Tenancy enforced by the database, not by the app.</h2>
+          <p>Every workspace is a <code>site_id</code>. A person's roles are rows in <code>user_roles</code>; a machine's ingest key resolves — through one SQL function — to exactly one site, or to nothing. Every read and write policy on every fleet table is pinned to that value, so a missing, revoked or guessed credential sees nothing and writes nothing.</p>
+          <p>Secrets are hashed at rest, webhooks are HMAC-signed, the copilot reads as the person asking, and <code>yantraops audit-security</code> tells you which posture a deployment is actually in. <a href="security.html">Read the security model →</a></p>
         </div>
-        <div class="card">
-          <h3>Run it in Docker</h3>
-          <p><code>docker build</code> or <code>docker compose up</code>, host networking, Linux/CI-ready.</p>
-        </div>
-        <div class="card">
-          <h3>Deploy to your own Supabase/Postgres project</h3>
-          <!-- Deliberately not a numeric range: migrations are added often
-               and a stale "0001-00NN" here is a claim that quietly goes
-               wrong. The directory is the source of truth. -->
-          <p>A numbered set of ordered, idempotent, checksummed SQL migrations under <code>supabase/</code> brings up the schema; <code>yantraops migrate</code> applies and tracks them.</p>
-        </div>
-        <div class="card">
-          <h3>Deploy to the cloud</h3>
-          <p>Documented, scripted paths for a single-instance deployment on <a href="https://github.com/punith-naga/yantrafleet/blob/main/deploy/aws/README.md"><strong>AWS EC2</strong></a> and on <a href="https://github.com/punith-naga/yantrafleet/blob/main/deploy/azure/README.md"><strong>Azure</strong></a>, including systemd service files and environment-variable hardening guidance.</p>
+        <div class="card" style="align-self:center">
+          <h3>Compliance mappings, documented honestly</h3>
+          <p>SOC 2 CC-series, ISO 27001, EU AI Act Article 14 (human oversight by design), ISA-18.2 alarm KPIs, NIST CSF and a VDA 5050 conformance statement — with the gaps listed next to the controls. <a href="/docs/COMPLIANCE.md">docs/COMPLIANCE.md</a></p>
         </div>
       </div>
-      <p style="margin-top:18px">There is no hosted SaaS version. You run Yantrika on your own infrastructure, with your own data, under the MIT license.</p>
     </div>
   </section>
 
+  <!-- ============================== FAQ ============================== -->
+  <!-- Visible copy of the FAQPage JSON-LD above — keep the two in sync. -->
   <section class="tight">
-    <div class="wrap">
-      <div class="callout">
-        <p class="kicker">Security &amp; access control, built in</p>
-        <p>Yantrika ships in <strong>demo mode</strong> by default — one shared key, zero setup, so you can evaluate it in minutes. For real deployments, two opt-in migrations lock it down:</p>
-        <ul>
-          <li><strong>Hardened mode</strong> — drops open read/write access; only authenticated sessions can read, and all writes move to a server-side service key.</li>
-          <li><strong>Full RBAC mode</strong> — role-based access control with four levels (<code>operator &lt; engineer &lt; manager &lt; admin</code>), scoped by site, enforced by Postgres row-level security policies and <code>SECURITY DEFINER</code> functions — not just application-layer checks. Command approval requires a manager-or-above role, going through a dedicated database function rather than a direct write path.</li>
-        </ul>
-        <p>Every alert acknowledgement, every command request, and every approve/reject decision is attributed to a named person with a timestamp — a full audit trail out of the box.</p>
-        <p style="margin-bottom:0"><a href="security.html">Read more about the security model →</a> · <a href="/docs/SECURITY.md">Full threat model &amp; hardening guide (docs/SECURITY.md)</a></p>
-      </div>
-    </div>
-  </section>
-
-  <!-- The visible copy of the FAQPage JSON-LD above. These two must stay
-       in sync: structured data that does not match what a visitor can
-       actually read on the page is a manual-action risk, not a shortcut. -->
-  <section>
     <div class="wrap" style="max-width:780px">
       <p class="kicker">Common questions</p>
       <h2>Straight answers.</h2>
-
-      <h3 style="margin-top:24px">Is there a hosted SaaS version?</h3>
-      <p>No. Yantrika is self-hosted software you run on your own infrastructure against your own database, under the MIT license. The live demo on this page is a throwaway sandbox that expires on its own; it is not a hosted product.</p>
-
-      <h3 style="margin-top:20px">Does it work with robots from more than one vendor?</h3>
-      <p>That is the point of it. Robots talk to Yantrika over <a href="vda-5050-conformance-test.html">VDA 5050 v2.1</a>, the open vendor-neutral MQTT protocol for AMR fleet communication, so any vehicle that implements the standard can be driven from the same console. The bundled simulator models a 10-robot fleet across 3 simulated vendors to exercise that path without hardware.</p>
-
-      <h3 style="margin-top:20px">Do I need an account or an email address to try it?</h3>
-      <p>No. The <a href="#demo">Try it</a> button mints a throwaway sandbox with its own site id and a small simulated fleet, and drops you straight into the console. It collects nothing about you, and the sandbox and its data are deleted when its time is up.</p>
-
-      <h3 style="margin-top:20px">What does it cost?</h3>
-      <p>Nothing. It is MIT licensed open-source software. There is no paid tier, no enterprise edition, and no feature held back behind a sales call. Your costs are whatever infrastructure you choose to run it on.</p>
-
-      <h3 style="margin-top:20px">How do I check whether my robots actually implement VDA 5050 correctly?</h3>
-      <p>Run <code>yantra-conform</code>, the conformance tester that ships with Yantrika. It grades a fleet against 52 checks drawn from VDA 5050 v2.1 and writes a single HTML report naming the clause, what was expected, what your vehicle actually did, and how to fix it. It is a command-line tool that runs on your machine against your broker, and it is free — <a href="vda-5050-conformance-test.html">here is what it tests and how to run it</a>.</p>
+      <details class="faq" open><summary>Is there a hosted version of Yantrika?</summary><p>Yes. Yantrika Cloud at yantrika.ai is the hosted platform: create a free account and you get your own workspace with ingest keys to connect robots, a one-click simulated fleet, and role-based seats for your team. The same code is open source under MIT, so you can also self-host it on your own infrastructure.</p></details>
+      <details class="faq"><summary>Can I see it without creating an account?</summary><p>Yes, two ways. The <a href="/console/#demo">demo</a> opens the full console on scripted mock data instantly with no login. The <a href="#demo-live">live sandbox</a> mints a throwaway site with a real simulated fleet for about an hour, also with no signup or email.</p></details>
+      <details class="faq"><summary>Does it work with robots from more than one vendor?</summary><p>That is the point of it. Robots talk to Yantrika over <a href="vda-5050-conformance-test.html">VDA 5050 v2.1</a>, the open vendor-neutral MQTT protocol for AMR fleet communication, so any vehicle that implements the standard can be driven from the same console. Anything else can publish over plain REST.</p></details>
+      <details class="faq"><summary>What does it cost?</summary><p>Yantrika Cloud is free while in beta, and the software is MIT-licensed open source with no paid tier, no enterprise edition and no feature held back. Self-hosting costs whatever infrastructure you choose to run it on. <a href="pricing.html">Pricing details →</a></p></details>
+      <details class="faq"><summary>How do I check whether my robots actually implement VDA 5050 correctly?</summary><p>Run <code>yantra-conform</code>, the free conformance tester that ships with Yantrika. It grades a fleet against 52 checks drawn from VDA 5050 v2.1 and writes a single HTML report naming the clause, what was expected, what your vehicle actually did, and how to fix it. <a href="vda-5050-conformance-test.html">Here is what it tests and how to run it.</a></p></details>
     </div>
   </section>
 
-  <section class="band">
+  <section class="band grad">
     <div class="wrap" style="text-align:center">
-      <h2>Yantrika is open source and self-hosted.</h2>
-      <p class="muted" style="max-width:56ch;margin:0 auto">Clone it, run it against the bundled simulator in three commands, and see your first fleet dashboard today.</p>
+      <h2>Your fleet, on screen, in about a minute.</h2>
+      <p class="muted" style="max-width:56ch;margin:0 auto">Create a free workspace, start the simulated fleet, then point your real robots at it whenever you are ready.</p>
       <div class="actions" style="justify-content:center;margin-top:22px">
-        <a class="btn primary" href="https://github.com/punith-naga/yantrafleet">View on GitHub</a>
-        <a class="btn secondary" href="docs.html">Read the Docs</a>
-        <a class="btn secondary" href="get-involved.html">Report an Issue</a>
+        <a class="btn primary" href="/console/#signup">Create free workspace</a>
+        <a class="btn secondary" href="/console/#demo">See the demo</a>
+        <a class="btn secondary" href="https://github.com/punith-naga/yantrafleet">Star on GitHub</a>
       </div>
     </div>
   </section>
@@ -376,39 +425,41 @@
     <div class="cols">
       <div>
         <div class="fbrand">Yantrika</div>
-        <p style="color:var(--muted);font-size:14px;max-width:38ch">Open-source, self-hosted fleet-operations platform for multi-vendor AMR fleets. MIT licensed.</p>
+        <p style="color:var(--muted);font-size:14px;max-width:38ch">Fleet operations for multi-vendor AMR fleets. Open source under MIT; hosted free while in beta.</p>
       </div>
       <div>
-        <h4>Site</h4>
+        <h4>Product</h4>
         <ul>
-          <li><a href="index.html">Home</a></li>
-          <li><a href="about.html">About</a></li>
           <li><a href="features.html">Features</a></li>
+          <li><a href="integrations.html">Integrations</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
           <li><a href="security.html">Security</a></li>
           <li><a href="changelog.html">Changelog</a></li>
-          <li><a href="search.html">Search this site</a></li>
         </ul>
       </div>
       <div>
-        <h4>Tools</h4>
+        <h4>Use it</h4>
         <ul>
-          <li><a href="vda-5050-conformance-test.html">VDA 5050 conformance test</a></li>
-          <li><a href="/console/">Fleet console</a></li>
+          <li><a href="/console/#demo">Demo (no login)</a></li>
+          <li><a href="/console/#signup">Create free workspace</a></li>
+          <li><a href="/console/#signin">Sign in</a></li>
           <li><a href="/academy/">Operator academy</a></li>
-          <li><a href="/docs/">Documentation site</a></li>
+          <li><a href="vda-5050-conformance-test.html">VDA 5050 conformance test</a></li>
         </ul>
       </div>
       <div>
-        <h4>Resources</h4>
+        <h4>Open source</h4>
         <ul>
           <li><a href="docs.html">Documentation</a></li>
           <li><a href="https://github.com/punith-naga/yantrafleet">GitHub repository</a></li>
           <li><a href="get-involved.html">Get involved / Issues</a></li>
+          <li><a href="about.html">About</a></li>
           <li><a href="https://github.com/punith-naga/yantrafleet/blob/main/LICENSE">License (MIT)</a></li>
+          <li><a href="search.html">Search this site</a></li>
         </ul>
       </div>
     </div>
-    <p class="fine">Yantrika is open source under the MIT license. This is a static marketing site with no tracking, no accounts, and no data collection.</p>
+    <p class="fine">Yantrika is open source under the MIT license. This site sets no cookies and runs no trackers; the console stores your session in your own browser.</p>
   </div>
 </footer>
 

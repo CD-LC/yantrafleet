@@ -15,6 +15,7 @@
     python -m yantraops sandbox-list                      # what's live here
     python -m yantraops sandbox-reap                      # cron: purge expired
     python -m yantraops sandbox-serve --port 8088         # the "Try it" door
+                                                          # (+ /api/workspace/)
 """
 from __future__ import annotations
 
@@ -144,8 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def add_sandbox_parsers(sub: Any) -> None:
     """``sandbox-mint|list|reap|drive`` — the zero-signup live demo (0009)."""
-    from .sandbox import (DEFAULT_CONSOLE_URL, DEFAULT_MAX_LIVE,
-                          DEFAULT_STATE_PATH)
+    from .sandbox import (AUTH_DEMO, AUTH_MODES, DEFAULT_CONSOLE_URL,
+                          DEFAULT_MAX_LIVE, DEFAULT_STATE_PATH,
+                          DEFAULT_WORKSPACE_MAX_LIVE)
 
     def backend(parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--url", default=None,
@@ -213,14 +215,18 @@ def add_sandbox_parsers(sub: Any) -> None:
     from .sandbox_http import (DEFAULT_HOST, DEFAULT_MAX_INFLIGHT,
                                DEFAULT_PORT, DEFAULT_RATE,
                                DEFAULT_RATE_WINDOW_S, DEFAULT_SWEEP_S,
-                               ROUTE_MINT)
+                               DEFAULT_WORKSPACE_RATE,
+                               DEFAULT_WORKSPACE_RATE_WINDOW_S, ROUTE_MINT,
+                               ROUTE_WS_PREFIX)
 
     serve = sub.add_parser(
         "sandbox-serve",
         help="HTTP door for the marketing page's 'Try it with a live fleet' "
              f"button: POST {ROUTE_MINT} mints one sandbox and answers its "
              "console URL. Rate-limited per IP; never accepts a "
-             "caller-supplied site or TTL")
+             f"caller-supplied site or TTL. Also serves {ROUTE_WS_PREFIX}"
+             "sim/start|stop|status for a signed-in workspace admin's "
+             "simulated fleet (0019), forwarding their JWT to PostgREST")
     backend(serve)
     serve.add_argument("--host", default=DEFAULT_HOST,
                        help=f"bind address (default {DEFAULT_HOST} — put "
@@ -281,14 +287,36 @@ def add_sandbox_parsers(sub: Any) -> None:
                             "until SIGTERM)")
     serve.add_argument("--quiet", action="store_true",
                        help="no banner and no access log")
+    serve.add_argument("--workspace-max-live", type=int, default=None,
+                       metavar="N",
+                       help="ceiling on concurrent WORKSPACE simulators on "
+                            f"this box (default {DEFAULT_WORKSPACE_MAX_LIVE}, "
+                            "env YANTRAOPS_WORKSPACE_MAX); counted "
+                            "separately from --max-live; answers HTTP 429")
+    serve.add_argument("--workspace-rate", type=int,
+                       default=DEFAULT_WORKSPACE_RATE, metavar="N",
+                       help="simulated-fleet starts allowed per IP per "
+                            f"window (default {DEFAULT_WORKSPACE_RATE}; 0 "
+                            "disables)")
+    serve.add_argument("--workspace-rate-window", type=float,
+                       default=DEFAULT_WORKSPACE_RATE_WINDOW_S, metavar="S",
+                       help="window for --workspace-rate in seconds "
+                            f"(default {int(DEFAULT_WORKSPACE_RATE_WINDOW_S)})")
 
     drive = sub.add_parser(
         "sandbox-drive",
-        help="internal: move one sandbox's fleet (spawned by sandbox-mint; "
-             "reads the demo token from $YANTRAOPS_DEMO_TOKEN)")
+        help="internal: move one site's fleet (spawned by sandbox-mint for a "
+             "DEMO-* sandbox, reading $YANTRAOPS_DEMO_TOKEN; or by the "
+             "workspace door with --auth ingest for a WS-* workspace, "
+             "reading $YANTRAOPS_INGEST_KEY)")
     drive.add_argument("--url", default=None)
     drive.add_argument("--key", default=None)
-    drive.add_argument("--site", required=True, metavar="DEMO-XXXX")
+    drive.add_argument("--site", required=True, metavar="DEMO-XXXX|WS-xxxxxxxx")
+    drive.add_argument("--auth", choices=AUTH_MODES, default=AUTH_DEMO,
+                       help="credential mode: 'demo' (x-yf-demo-token from "
+                            "$YANTRAOPS_DEMO_TOKEN, DEMO-* sites) or "
+                            "'ingest' (x-yf-ingest-key from "
+                            "$YANTRAOPS_INGEST_KEY, WS-* sites)")
     drive.add_argument("--robots", type=int, default=6)
     drive.add_argument("--interval", type=float, default=2.0)
     drive.add_argument("--until", default=None, metavar="ISO8601",
@@ -424,10 +452,13 @@ def cmd_sandbox(args: argparse.Namespace) -> int:
             trusted_proxy_hops=args.trusted_proxy_hops,
             allow_origin=args.allow_origin,
             sweep_interval=args.sweep_interval, duration=args.duration,
-            quiet=args.quiet)
+            quiet=args.quiet, workspace_max_live=args.workspace_max_live,
+            workspace_rate=args.workspace_rate,
+            workspace_rate_window=args.workspace_rate_window)
     return sb.run_sandbox_drive(
         base_url, key, args.site, robots=args.robots,
-        interval=args.interval, until=args.until, ticks=args.ticks)
+        interval=args.interval, until=args.until, ticks=args.ticks,
+        auth=args.auth)
 
 
 if __name__ == "__main__":

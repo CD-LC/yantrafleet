@@ -57,12 +57,31 @@ real PostgreSQL 16 with 0001-0017 applied:
     clause against the EXISTING row, so an upsert aimed at another site's
     primary key is refused (42501) rather than merged.
 
+Workspace emulation (supabase/0019_workspaces.sql, docs/WORKSPACES.md):
+a caller that presents no ``Authorization`` bearer JWT but DOES send an
+``x-yf-ingest-key`` header matching a live key in :attr:`FakePostgREST.
+ingest_keys` resolves to an ``ingest`` identity pinned to that key's
+``WS-*`` site — the same shape as the demo identity, in a disjoint
+namespace, and fail-closed in exactly the same ways (malformed, unknown,
+revoked or expired keys are plain anon). The four workspace tables live
+in in-memory stores with no table route (``revoke all`` posture), the 13
+``workspace_*``/``my_workspace`` RPCs are emulated with the same role
+checks as the SQL, and :meth:`FakePostgREST.simulate_signup` does what
+the ``auth.users`` trigger does so tests can stand up a workspace with
+one call. Role grants made by the trigger/RPCs live in
+:attr:`FakePostgREST.role_grants` (keyed by user id, like ``user_roles``)
+and are honoured by ``has_role``/``row_visible`` alongside the JWT
+claims, so a plain session token from :func:`make_session_jwt` — no
+``yf_role`` claim, exactly like a real Supabase access token — sees what
+its grants allow and nothing more.
+
 Everything stays on localhost sockets, so tests remain hermetic — no
 Supabase, no DNS, no network egress.
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import re
 import threading
@@ -97,6 +116,20 @@ DEMO_UPDATE_COLUMNS: dict[str, frozenset[str]] = {
 
 #: 0009 demo site namespace (public.yf_is_demo_site).
 DEMO_SITE_PREFIX = "DEMO-"
+
+#: 0019 workspace site namespace (public.yf_is_workspace_site): 'WS-' + 8
+#: lowercase hex, and nothing else — the shape is part of the contract.
+WS_SITE_PREFIX = "WS-"
+_WS_SITE_RE = re.compile(r"^WS-[0-9a-f]{8}$")
+
+#: 0019 ingest key shape (public.yf_ingest_key's guard): 'yk_' + 64 hex.
+_INGEST_KEY_RE = re.compile(r"^yk_[0-9a-f]{64}$")
+
+#: The roles a workspace admin may grant (0019 CHECK constraints).
+WORKSPACE_ROLES: tuple[str, ...] = ("operator", "engineer", "manager", "admin")
+
+#: Ceiling on live integration keys per workspace (workspace_create_ingest_key).
+WORKSPACE_MAX_INTEGRATION_KEYS = 10
 
 #: 0017 (supabase/0017_demo_command_scope.sql): tables whose demo INSERT
 #: must name a robot that lives in the SAME sandbox site, and the column
@@ -198,6 +231,33 @@ def make_test_jwt(email: str, yf_role: str, site: str = DEFAULT_SITE_ID) -> str:
     return f"{_JWT_PREFIX}{blob}.sig"
 
 
+def make_session_jwt(email: str) -> str:
+    """An UNSIGNED test token shaped like a plain Supabase session.
+
+    Carries ``sub``, ``email`` and ``role: 'authenticated'`` and NO
+    ``yf_role``/``site_id`` claims — exactly what a real access token has.
+    What such a caller may see is decided entirely by the role grants in
+    :attr:`FakePostgREST.role_grants` (the ``user_roles`` stand-in that the
+    0019 sign-up trigger and workspace RPCs write), which is how the
+    self-serve flow is exercised offline without pretending the JWT knows
+    the caller's role. ``sub`` is the same uuid5 :func:`make_test_jwt`
+    derives for the email, so the two token styles name the same user.
+    """
+    claims = {
+        "sub": str(uuid.uuid5(uuid.NAMESPACE_URL, f"yf-test-user:{email}")),
+        "email": email,
+        "role": "authenticated",
+    }
+    blob = base64.urlsafe_b64encode(
+        json.dumps(claims, separators=(",", ":")).encode()).rstrip(b"=").decode()
+    return f"{_JWT_PREFIX}{blob}.sig"
+
+
+def test_user_id(email: str) -> str:
+    """The ``auth.users.id`` the test tokens derive for ``email``."""
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, f"yf-test-user:{email}"))
+
+
 def _decode_test_jwt(token: str) -> dict[str, Any] | None:
     """Claims from a ``yf-test.…`` token, or None when unparsable."""
     if not token.startswith(_JWT_PREFIX):
@@ -219,7 +279,7 @@ class _Identity:
     def __init__(self, kind: str, sub: str | None = None,
                  email: str | None = None, yf_role: str | None = None,
                  site_id: str = DEFAULT_SITE_ID) -> None:
-        self.kind = kind              # 'service'|'authenticated'|'demo'|'anon'
+        self.kind = kind              # 'service'|'authenticated'|'demo'|'ingest'|'anon'
         self.sub = sub
         self.email = email
         self.yf_role = yf_role        # validated against ROLE_RANK, else None
@@ -238,6 +298,17 @@ class _Identity:
     def is_demo(self) -> bool:
         """0009: a live demo token, pinned to exactly one DEMO-* site."""
         return self.kind == "demo"
+
+    @property
+    def is_ingest(self) -> bool:
+        """0019: a live ingest key, pinned to exactly one WS-* site."""
+        return self.kind == "ingest"
+
+    @property
+    def is_machine(self) -> bool:
+        """A header-token identity (demo OR ingest): the anon role plus one
+        bearer secret, reaching the seven fleet tables of one site only."""
+        return self.kind in ("demo", "ingest")
 
 
 def _now_iso() -> str:
@@ -295,6 +366,21 @@ def _bucket(status: Any) -> str:
 def _new_token() -> str:
     """64 hex chars, matching 0009/0010's two-UUIDs-of-entropy tokens."""
     return uuid.uuid4().hex + uuid.uuid4().hex
+
+
+def _new_ingest_key() -> str:
+    """``yk_`` + 64 hex — 0019's workspace_create_ingest_key shape."""
+    return "yk_" + uuid.uuid4().hex + uuid.uuid4().hex
+
+
+def _ingest_key_hash(key: str) -> str:
+    """Python mirror of ``public.yf_ingest_key_hash`` (sha256 hex)."""
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+
+def _new_ws_site() -> str:
+    """``WS-`` + 8 lowercase hex — the shape ``yf_is_workspace_site`` wants."""
+    return WS_SITE_PREFIX + uuid.uuid4().hex[:8]
 
 
 def _certificate_level(score: Any) -> str | None:
@@ -526,6 +612,28 @@ class FakePostgREST:
         #: explicitly via :meth:`set_user_role` — 0014's inbound RPCs need
         #: to look up the role of a user who is NOT the caller.
         self.user_roles: dict[tuple[str, str], str] = {}
+        #: 0007 user_roles stand-in keyed the way the real table is —
+        #: {(user_id, site_id): {user_id, email, site_id, role, granted_at}}.
+        #: Written by the 0019 sign-up trigger emulation and the workspace
+        #: RPCs, and ALSO from every yf-test JWT's claims (so the two views
+        #: of a caller's role never disagree). Honoured by has_role() and
+        #: row_visible() alongside the claims.
+        self.role_grants: dict[tuple[str, str], Row] = {}
+        #: auth.users stand-in: {lowercased email: user_id}. Filled by
+        #: simulate_signup() and by every JWT this fake sees, so
+        #: workspace_invite can tell "existing account" from "invite".
+        self.auth_users: dict[str, str] = {}
+        #: 0019 workspaces stand-in: {site_id: row}. No table route for
+        #: anon; authenticated reads go through rpc_my_workspace only (the
+        #: real table has a SELECT policy, but no component reads it raw).
+        self.workspaces: dict[str, Row] = {}
+        #: 0019 ingest_keys stand-in: {id: row} holding key_hash, never the
+        #: plaintext — exactly like the real table.
+        self.ingest_keys: dict[str, Row] = {}
+        #: 0019 workspace_invites stand-in: {id: row}.
+        self.workspace_invites: dict[str, Row] = {}
+        #: 0019 workspace_sims stand-in: {site_id: row}.
+        self.workspace_sims: dict[str, Row] = {}
         self._demo_serial = 0
         self.tables: dict[str, list[Row]] = {t: [] for t in TABLES}
         if tables:
@@ -633,12 +741,19 @@ class FakePostgREST:
         if claims and claims.get("role") == "authenticated":
             yf_role = claims.get("yf_role")
             email = claims.get("email")
+            sub = claims.get("sub")
             site = claims.get("site_id") or DEFAULT_SITE_ID
+            if email and sub:                      # auth.users stand-in
+                self.auth_users.setdefault(str(email).lower(), str(sub))
             if email and yf_role in ROLE_RANK:   # user_roles stand-in
                 self.user_roles[(email, site)] = yf_role
+                if sub:
+                    self.role_grants.setdefault((str(sub), site), {
+                        "user_id": str(sub), "email": email, "site_id": site,
+                        "role": yf_role, "granted_at": _now_iso()})
             return _Identity(
                 "authenticated",
-                sub=claims.get("sub"),
+                sub=sub,
                 email=email,
                 yf_role=yf_role if yf_role in ROLE_RANK else None,
                 site_id=site,
@@ -646,6 +761,11 @@ class FakePostgREST:
         site = self.demo_site(headers.get("x-yf-demo-token"))
         if site is not None:
             return _Identity("demo", site_id=site)
+        # 0019: an ingest key is consulted only when there is no JWT and no
+        # live demo token, mirroring policies declared ``to anon``.
+        site = self.ingest_site(headers.get("x-yf-ingest-key"))
+        if site is not None:
+            return _Identity("ingest", site_id=site)
         return _Identity("anon")  # incl. anon_key and any garbage credential
 
     # -- 0009 demo-sandbox helpers ----------------------------------------
@@ -666,31 +786,86 @@ class FakePostgREST:
             return None
         return row.get("site_id")
 
+    def ingest_site(self, key: str | None) -> str | None:
+        """``public.yf_ingest_site()``: the one WS-* site this key may touch.
+
+        None for a missing / malformed / revoked / expired / unknown key, or
+        one whose workspace no longer exists — fail-closed, exactly like the
+        SQL (a NULL site never matches a row). Only the sha256 of the
+        presented key is ever compared, as in the real table."""
+        key = (key or "").strip()
+        if not _INGEST_KEY_RE.match(key):
+            return None                      # yf_ingest_key()'s shape guard
+        digest = _ingest_key_hash(key)
+        row = next((r for r in self.ingest_keys.values()
+                    if r.get("key_hash") == digest), None)
+        if row is None or row.get("revoked_at"):
+            return None
+        expires = _ts(row.get("expires_at"))
+        if expires is not None and expires <= _now():
+            return None
+        site = row.get("site_id")
+        if site not in self.workspaces or not _WS_SITE_RE.match(str(site)):
+            return None
+        return site
+
     def can_read_site(self, ident: _Identity, site: str | None) -> bool:
         """``public.yf_can_read_site()``: operator+ at this site (admins
-        global), or this request's own live demo sandbox."""
+        global), this request's own live demo sandbox, or (0019) this
+        request's own workspace via its ingest key."""
         if site is None:
             return False
         if ident.kind == "service":
             return True
         if ident.is_demo:
             return site == ident.site_id and site.startswith(DEMO_SITE_PREFIX)
-        if ident.kind != "authenticated" or ident.rank < 1:
+        if ident.is_ingest:
+            return site == ident.site_id and bool(_WS_SITE_RE.match(site))
+        if ident.kind != "authenticated":
             return False
-        return ident.is_admin or ident.site_id == site
+        return self.has_role(ident, "operator", site)
+
+    def _grants_of(self, user_id: str | None) -> list[Row]:
+        if not user_id:
+            return []
+        return [g for (uid, _s), g in self.role_grants.items() if uid == user_id]
+
+    def _global_admin(self, ident: _Identity) -> bool:
+        """``yf_has_role``'s admin-anywhere clause, 0019 edition: only an
+        admin role at a non-workspace (legacy) site is global."""
+        if ident.is_admin and not _WS_SITE_RE.match(ident.site_id or ""):
+            return True
+        return any(g["role"] == "admin" and not _WS_SITE_RE.match(g["site_id"])
+                   for g in self._grants_of(ident.sub))
 
     def has_role(self, ident: _Identity, minimum: str,
                  site: str | None = None) -> bool:
-        """``public.yf_has_role()``: rank at site, admin at any site global."""
+        """``public.yf_has_role()``: rank at site, admin at any site global.
+
+        Two sources are consulted and OR-ed, mirroring the one real table:
+        the JWT's ``yf_role``/``site_id`` claims (the pre-0019 shortcut every
+        existing test uses) and :attr:`role_grants` (what the 0019 trigger
+        and RPCs write). A plain session token with no claims therefore
+        holds exactly the roles it was granted — and nothing more.
+        """
         if ident.kind == "service":
             return True
         if ident.kind != "authenticated":
             return False
-        if ident.is_admin:
+        # 0007's global admin, as narrowed by 0019: an admin role held at a
+        # LEGACY site is admin everywhere; one held at a WS-* workspace is
+        # admin of that workspace only (a self-serve sign-up must not become
+        # an admin of the platform operator's fleet or of other tenants).
+        if self._global_admin(ident):
             return True
-        if site is not None and ident.site_id != site:
-            return False
-        return ident.rank >= ROLE_RANK.get(minimum, 99)
+        need = ROLE_RANK.get(minimum, 99)
+        if (site is None or ident.site_id == site) and ident.rank >= need:
+            return True
+        if site is not None and ident.sub:
+            grant = self.role_grants.get((ident.sub, site))
+            if grant is not None and ROLE_RANK.get(grant["role"], 0) >= need:
+                return True
+        return False
 
     def rank_at(self, email: str | None, site: str) -> int:
         """``public.yf_rank_at()``: the rank of an ARBITRARY user, for the
@@ -701,7 +876,13 @@ class FakePostgREST:
         if any(r == "admin" for (e, _s), r in self.user_roles.items()
                if e == email):
             return 4
-        return ROLE_RANK.get(self.user_roles.get((email, site), ""), 0)
+        uid = self.auth_users.get(str(email).lower())
+        if any(g["role"] == "admin" and not _WS_SITE_RE.match(g["site_id"])
+               for g in self._grants_of(uid)):
+            return 4
+        granted = self.role_grants.get((uid or "", site), {}).get("role", "")
+        return max(ROLE_RANK.get(self.user_roles.get((email, site), ""), 0),
+                   ROLE_RANK.get(granted, 0))
 
     def set_user_role(self, email: str, role: str,
                       site: str = DEFAULT_SITE_ID) -> None:
@@ -717,11 +898,17 @@ class FakePostgREST:
             return (table in DEMO_TABLES
                     and row.get("site_id") == ident.site_id
                     and str(row.get("site_id", "")).startswith(DEMO_SITE_PREFIX))
-        if ident.kind != "authenticated" or ident.rank < 1:
-            return False  # anon / no role row -> RLS shows nothing
+        if ident.is_ingest:
+            # 0019: ingest_read — same seven tables, pinned to one WS-* site.
+            return (table in DEMO_TABLES
+                    and row.get("site_id") == ident.site_id
+                    and bool(_WS_SITE_RE.match(str(row.get("site_id", "")))))
+        if ident.kind != "authenticated":
+            return False  # anon -> RLS shows nothing
         if table not in SITE_TABLES:  # fleet_meta: any role holder
-            return True
-        return ident.is_admin or row.get("site_id", DEFAULT_SITE_ID) == ident.site_id
+            return ident.rank >= 1 or bool(self._grants_of(ident.sub))
+        return self.has_role(ident, "operator",
+                             row.get("site_id", DEFAULT_SITE_ID))
 
     # -- RPCs (POST /rest/v1/rpc/<fn>) — 0007's SECURITY DEFINER functions.
     #    Each returns (http_status, json_payload). Role checks apply only
@@ -2336,6 +2523,353 @@ class FakePostgREST:
         return 200, sorted((dict(c) for c in self.status_pages.values()),
                            key=lambda r: str(r.get("site_id")))
 
+    # ---- 0019 workspaces -------------------------------------------------
+    #    Every RPC answers HTTP 200 with a jsonb envelope {ok, ...}; a
+    #    refusal is {ok:false, reason, error}, never a 4xx — the console
+    #    renders the reason, and the door maps it to a status code. Role
+    #    checks are intrinsic (they need auth.uid()), so they apply in both
+    #    rbac modes, unlike the 0007-0016 handlers above.
+
+    @staticmethod
+    def _ws_refuse(reason: str, error: str) -> tuple[int, Any]:
+        return 200, {"ok": False, "reason": reason, "error": error}
+
+    def _provision_workspace(self, user_id: str, email: str | None) -> str:
+        """``public._yf_provision_workspace``: one default workspace per
+        user, the admin role in it, and every pending invite consumed."""
+        mine = sorted(self._grants_of(user_id),
+                      key=lambda g: str(g.get("granted_at") or ""))
+        if mine:
+            return mine[0]["site_id"]
+        local = (email or "").split("@", 1)[0] or "My"
+        site = _new_ws_site()
+        while site in self.workspaces:          # astronomically unlikely
+            site = _new_ws_site()
+        now = _now_iso()
+        self.workspaces[site] = {"site_id": site, "name": f"{local}'s workspace",
+                                 "owner_id": user_id, "plan": "free",
+                                 "created_at": now, "updated_at": now}
+        self.role_grants[(user_id, site)] = {
+            "user_id": user_id, "email": email, "site_id": site,
+            "role": "admin", "granted_at": now}
+        wanted = (email or "").strip().lower()
+        for inv in self.workspace_invites.values():
+            if inv.get("accepted_at") or not wanted or inv["email"] != wanted:
+                continue
+            self.role_grants[(user_id, inv["site_id"])] = {
+                "user_id": user_id, "email": email, "site_id": inv["site_id"],
+                "role": inv["role"], "granted_at": _now_iso()}
+            inv["accepted_at"] = _now_iso()
+        return site
+
+    def simulate_signup(self, email: str, user_id: str | None = None) -> Row:
+        """What ``after insert on auth.users`` -> ``yf_handle_new_user()``
+        does: register the account and provision its workspace. Returns
+        ``{user_id, email, site_id}``. ``user_id`` defaults to the uuid5 the
+        test tokens derive for ``email``, so ``make_session_jwt(email)``
+        then signs in as exactly this user."""
+        uid = user_id or test_user_id(email)
+        self.auth_users[email.strip().lower()] = uid
+        site = self._provision_workspace(uid, email)
+        return {"user_id": uid, "email": email, "site_id": site}
+
+    def _my_site(self, ident: _Identity) -> str | None:
+        """``public._yf_my_site()``: owner's site, else highest role, else
+        the oldest grant. None for a caller with no role anywhere."""
+        grants = self._grants_of(ident.sub)
+        if not grants:
+            return None
+
+        def key(g: Row) -> tuple[int, int, str]:
+            ws = self.workspaces.get(g["site_id"]) or {}
+            owner = 0 if ws.get("owner_id") == ident.sub else 1
+            return (owner, -ROLE_RANK.get(g["role"], 0),
+                    str(g.get("granted_at") or ""))
+
+        return sorted(grants, key=key)[0]["site_id"]
+
+    def _ws_admin_gate(self, ident: _Identity) -> tuple[str | None, tuple[int, Any] | None]:
+        """``public._yf_ws_admin_gate()``: (site, None) for an admin at their
+        workspace, else (None, refusal)."""
+        if ident.kind != "authenticated" or not ident.sub:
+            return None, self._ws_refuse("unauthenticated", "Sign in first.")
+        site = self._my_site(ident)
+        if site is None:
+            return None, self._ws_refuse(
+                "no_workspace", "You do not belong to any workspace yet — "
+                                "call workspace_bootstrap().")
+        if not self.has_role(ident, "admin", site):
+            return None, self._ws_refuse(
+                "forbidden", f"This action requires the admin role at "
+                             f"workspace {site}.")
+        return site, None
+
+    def _sim_view(self, site: str) -> Row:
+        row = self.workspace_sims.get(site) or {}
+        expires = _ts(row.get("expires_at"))
+        running = bool(row) and not row.get("stopped_at") and \
+            expires is not None and expires > _now()
+        return {"running": running, "expires_at": row.get("expires_at"),
+                "robots": row.get("robots"), "started_at": row.get("started_at")}
+
+    def _live_keys(self, site: str, kind: str | None = None) -> list[Row]:
+        out = []
+        for k in self.ingest_keys.values():
+            if k["site_id"] != site or k.get("revoked_at"):
+                continue
+            if kind is not None and k["kind"] != kind:
+                continue
+            expires = _ts(k.get("expires_at"))
+            if expires is not None and expires <= _now():
+                continue
+            out.append(k)
+        return out
+
+    def rpc_my_workspace(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        if ident.kind != "authenticated" or not ident.sub:
+            return self._ws_refuse("unauthenticated", "Sign in first.")
+        site = self._my_site(ident)
+        if site is None:
+            return 200, {"ok": True, "site_id": None}
+        grant = self.role_grants.get((ident.sub, site)) or {}
+        ws = self.workspaces.get(site)
+        admin = self.has_role(ident, "admin", site)
+        keys = [{"id": k["id"], "prefix": k["prefix"], "label": k["label"],
+                 "kind": k["kind"], "created_at": k["created_at"],
+                 "expires_at": k.get("expires_at")}
+                for k in self._live_keys(site)] if ws else []
+        keys.sort(key=lambda k: str(k["created_at"]), reverse=True)
+        members: list[Row] = []
+        invites: list[Row] = []
+        if admin:
+            by_uid = {v: k for k, v in self.auth_users.items()}
+            members = sorted(
+                ({"user_id": g["user_id"],
+                  "email": g.get("email") or by_uid.get(g["user_id"]),
+                  "role": g["role"], "granted_at": g.get("granted_at")}
+                 for (_u, s), g in self.role_grants.items() if s == site),
+                key=lambda m: str(m["granted_at"] or ""))
+            invites = sorted(
+                ({"id": i["id"], "email": i["email"], "role": i["role"],
+                  "created_at": i["created_at"]}
+                 for i in self.workspace_invites.values()
+                 if i["site_id"] == site and not i.get("accepted_at")),
+                key=lambda i: str(i["created_at"]), reverse=True)
+        return 200, {
+            "ok": True, "site_id": site,
+            "name": (ws or {}).get("name") or site,
+            "plan": (ws or {}).get("plan") or "self-hosted",
+            "role": grant.get("role"),
+            "owner": bool(ws) and ws.get("owner_id") == ident.sub,
+            "owner_id": (ws or {}).get("owner_id"),
+            "created_at": (ws or {}).get("created_at"),
+            "keys": keys, "sim": self._sim_view(site),
+            "members": members, "invites": invites}
+
+    def rpc_workspace_bootstrap(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        if ident.kind != "authenticated" or not ident.sub:
+            return self._ws_refuse("unauthenticated", "Sign in first.")
+        if not self._grants_of(ident.sub):
+            if ident.email:
+                self.auth_users.setdefault(ident.email.lower(), ident.sub)
+            self._provision_workspace(ident.sub, ident.email)
+        return self.rpc_my_workspace(ident, {})
+
+    def rpc_workspace_rename(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        name = str(args.get("p_name") or "").strip()
+        if not 1 <= len(name) <= 60:
+            return self._ws_refuse("invalid_name",
+                                   "A workspace name is 1 to 60 characters.")
+        ws = self.workspaces.get(site)
+        if ws is None:
+            return self._ws_refuse("not_workspace",
+                                   f"Site {site} is not a self-serve workspace.")
+        ws["name"], ws["updated_at"] = name, _now_iso()
+        return 200, {"ok": True, "name": name}
+
+    def rpc_workspace_create_ingest_key(self, ident: _Identity,
+                                        args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        if site not in self.workspaces:
+            return self._ws_refuse("not_workspace",
+                                   f"Site {site} is not a self-serve workspace.")
+        if len(self._live_keys(site, "integration")) >= WORKSPACE_MAX_INTEGRATION_KEYS:
+            return self._ws_refuse(
+                "too_many_keys", "This workspace already has 10 active "
+                                 "integration keys — revoke one first.")
+        label = str(args.get("p_label") or "").strip()[:60] or "default"
+        key = _new_ingest_key()
+        row = {"id": str(uuid.uuid4()), "site_id": site,
+               "key_hash": _ingest_key_hash(key), "prefix": key[:12],
+               "label": label, "kind": "integration", "created_by": ident.sub,
+               "created_at": _now_iso(), "expires_at": None, "revoked_at": None}
+        self.ingest_keys[row["id"]] = row
+        return 200, {"ok": True, "id": row["id"], "key": key,
+                     "prefix": key[:12], "label": label}
+
+    def rpc_workspace_revoke_ingest_key(self, ident: _Identity,
+                                        args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        row = self.ingest_keys.get(str(args.get("p_id") or ""))
+        if row is not None and row["site_id"] == site and not row.get("revoked_at"):
+            row["revoked_at"] = _now_iso()
+        return 200, {"ok": True}
+
+    def rpc_workspace_invite(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        role = args.get("p_role")
+        if role not in WORKSPACE_ROLES:
+            return self._ws_refuse("invalid_role", "Role must be one of "
+                                   "operator, engineer, manager, admin.")
+        email = str(args.get("p_email") or "").strip().lower()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+            return self._ws_refuse("invalid_email", "That is not an email address.")
+        owner = (self.workspaces.get(site) or {}).get("owner_id")
+        uid = self.auth_users.get(email)
+        if uid is not None:
+            if owner is not None and uid == owner and role != "admin":
+                return self._ws_refuse("owner", "The workspace owner is always "
+                                       "an admin and cannot be demoted.")
+            self.role_grants[(uid, site)] = {
+                "user_id": uid, "email": email, "site_id": site, "role": role,
+                "granted_at": (self.role_grants.get((uid, site)) or {}).get(
+                    "granted_at") or _now_iso()}
+            return 200, {"ok": True, "status": "added", "email": email,
+                         "role": role}
+        inv = next((i for i in self.workspace_invites.values()
+                    if i["site_id"] == site and i["email"] == email), None)
+        if inv is None:
+            inv = {"id": str(uuid.uuid4()), "site_id": site, "email": email}
+            self.workspace_invites[inv["id"]] = inv
+        inv.update({"role": role, "invited_by": ident.sub,
+                    "created_at": _now_iso(), "accepted_at": None})
+        return 200, {"ok": True, "status": "invited", "email": email,
+                     "role": role}
+
+    def rpc_workspace_set_member_role(self, ident: _Identity,
+                                      args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        role = args.get("p_role")
+        if role not in WORKSPACE_ROLES:
+            return self._ws_refuse("invalid_role", "Role must be one of "
+                                   "operator, engineer, manager, admin.")
+        uid = str(args.get("p_user_id") or "")
+        owner = (self.workspaces.get(site) or {}).get("owner_id")
+        if owner is not None and uid == owner:
+            return self._ws_refuse("owner", "The workspace owner is always an "
+                                   "admin and cannot be changed.")
+        grant = self.role_grants.get((uid, site))
+        if grant is None:
+            return self._ws_refuse("not_member",
+                                   "That user is not a member of this workspace.")
+        grant["role"] = role
+        return 200, {"ok": True}
+
+    def rpc_workspace_remove_member(self, ident: _Identity,
+                                    args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        uid = str(args.get("p_user_id") or "")
+        owner = (self.workspaces.get(site) or {}).get("owner_id")
+        if owner is not None and uid == owner:
+            return self._ws_refuse("owner", "The workspace owner cannot be "
+                                   "removed from their own workspace.")
+        self.role_grants.pop((uid, site), None)
+        return 200, {"ok": True}
+
+    def rpc_workspace_cancel_invite(self, ident: _Identity,
+                                    args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        inv_id = str(args.get("p_id") or "")
+        inv = self.workspace_invites.get(inv_id)
+        if inv is not None and inv["site_id"] == site and not inv.get("accepted_at"):
+            del self.workspace_invites[inv_id]
+        return 200, {"ok": True}
+
+    def _revoke_sim_keys(self, site: str) -> None:
+        for k in self.ingest_keys.values():
+            if k["site_id"] == site and k["kind"] == "sim" and not k.get("revoked_at"):
+                k["revoked_at"] = _now_iso()
+
+    def rpc_workspace_sim_start(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        if site not in self.workspaces or not _WS_SITE_RE.match(site):
+            return self._ws_refuse("not_workspace", "Simulated fleets run only "
+                                   f"in self-serve workspaces (WS-*), not in {site}.")
+        minutes = args.get("p_minutes")
+        minutes = 240 if not isinstance(minutes, int) else min(max(minutes, 5), 1440)
+        robots = args.get("p_robots")
+        robots = 8 if not isinstance(robots, int) else min(max(robots, 2), 20)
+        expires = _iso(_now() + timedelta(minutes=minutes))
+        self._revoke_sim_keys(site)
+        key = _new_ingest_key()
+        row = {"id": str(uuid.uuid4()), "site_id": site,
+               "key_hash": _ingest_key_hash(key), "prefix": key[:12],
+               "label": "simulated fleet", "kind": "sim",
+               "created_by": ident.sub, "created_at": _now_iso(),
+               "expires_at": expires, "revoked_at": None}
+        self.ingest_keys[row["id"]] = row
+        self.workspace_sims[site] = {
+            "site_id": site, "key_id": row["id"], "started_by": ident.sub,
+            "started_at": _now_iso(), "expires_at": expires,
+            "robots": robots, "stopped_at": None}
+        return 200, {"ok": True, "site_id": site, "key": key,
+                     "expires_at": expires, "robots": robots}
+
+    def rpc_workspace_sim_stop(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        self._revoke_sim_keys(site)
+        sim = self.workspace_sims.get(site)
+        if sim is not None and not sim.get("stopped_at"):
+            sim["stopped_at"] = _now_iso()
+        return 200, {"ok": True, "site_id": site}
+
+    def rpc_workspace_sim_status(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        if ident.kind != "authenticated" or not ident.sub:
+            return self._ws_refuse("unauthenticated", "Sign in first.")
+        site = self._my_site(ident)
+        if site is None:
+            return self._ws_refuse("no_workspace", "You do not belong to any "
+                                   "workspace yet — call workspace_bootstrap().")
+        if not self.has_role(ident, "operator", site):
+            return self._ws_refuse("forbidden", "This action requires at least "
+                                   f"the operator role at {site}.")
+        return 200, {"ok": True, "site_id": site, **self._sim_view(site)}
+
+    def rpc_workspace_purge_fleet(self, ident: _Identity, args: Row) -> tuple[int, Any]:
+        site, refusal = self._ws_admin_gate(ident)
+        if refusal is not None:
+            return refusal
+        if site not in self.workspaces or not _WS_SITE_RE.match(site):
+            return self._ws_refuse("not_workspace", "Only a self-serve workspace "
+                                   f"(WS-*) can be purged; {site} is not one.")
+        deleted: dict[str, int] = {}
+        for table in ("robot_telemetry", "maintenance_findings", "commands",
+                      "alerts", "incidents", "missions", "robots"):
+            rows = self.tables[table]
+            keep = [r for r in rows if r.get("site_id") != site]
+            deleted[table] = len(rows) - len(keep)
+            self.tables[table] = keep
+        return 200, {"ok": True, "site_id": site, "deleted": deleted}
+
     RPCS: dict[str, str] = {
         # 0007 / 0008
         "decide_command": "rpc_decide_command",
@@ -2389,6 +2923,20 @@ class FakePostgREST:
         "public_fleet_status": "rpc_public_fleet_status",
         "admin_set_status_page": "rpc_admin_set_status_page",
         "admin_list_status_pages": "rpc_admin_list_status_pages",
+        # 0019 workspaces
+        "my_workspace": "rpc_my_workspace",
+        "workspace_bootstrap": "rpc_workspace_bootstrap",
+        "workspace_rename": "rpc_workspace_rename",
+        "workspace_create_ingest_key": "rpc_workspace_create_ingest_key",
+        "workspace_revoke_ingest_key": "rpc_workspace_revoke_ingest_key",
+        "workspace_invite": "rpc_workspace_invite",
+        "workspace_set_member_role": "rpc_workspace_set_member_role",
+        "workspace_remove_member": "rpc_workspace_remove_member",
+        "workspace_cancel_invite": "rpc_workspace_cancel_invite",
+        "workspace_sim_start": "rpc_workspace_sim_start",
+        "workspace_sim_stop": "rpc_workspace_sim_stop",
+        "workspace_sim_status": "rpc_workspace_sim_status",
+        "workspace_purge_fleet": "rpc_workspace_purge_fleet",
     }
 
 
@@ -2533,6 +3081,36 @@ class _Handler(BaseHTTPRequestHandler):
             an id oracle, not a write path, and no writer here collides.
         """
         what = f"insert into {table}"
+        if ident.is_ingest:
+            # 0019 ingest_insert: the seven fleet tables, every row stamped
+            # with the key's own WS-* site (a missing site_id takes 0005's
+            # column default, BLR-DC1, and is therefore refused), and no
+            # merge onto a row another site owns.
+            if table not in DEMO_TABLES:
+                return self._reply(403, {
+                    "message": f"{what}: permission denied — an ingest key "
+                               "reaches only the fleet tables of its own "
+                               "workspace", "code": "42501"}) or True
+            for row in rows:
+                if row.get("site_id", DEFAULT_SITE_ID) != ident.site_id:
+                    return self._reply(403, {
+                        "message": "new row violates row-level security "
+                                   f"policy for table \"{table}\" — an ingest "
+                                   "key may only write its own workspace "
+                                   f"site {ident.site_id}",
+                        "code": "42501"}) or True
+            if on_conflict and resolution == "merge-duplicates":
+                victim = self._conflict_owner(table, rows, on_conflict,
+                                              ident.site_id)
+                if victim is not None:
+                    return self._reply(403, {
+                        "message": "new row violates row-level security "
+                                   f"policy (USING expression) for table "
+                                   f"\"{table}\" — {on_conflict}="
+                                   f"{victim!r} already belongs to another "
+                                   "site; an ingest key cannot merge onto it",
+                        "code": "42501"}) or True
+            return None
         if ident.is_demo:
             if table not in DEMO_TABLES:
                 return self._reply(403, {
@@ -2656,24 +3234,27 @@ class _Handler(BaseHTTPRequestHandler):
         row_ok: Callable[[Row], bool] | None = None
         if self.fake.rbac:
             ident = self.fake.identity(self.headers)
-            if ident.is_demo:
-                # 0009 demo_sandbox_update + the column-level grants.
+            if ident.is_machine:
+                # 0009 demo_sandbox_update / 0019 ingest_update + the
+                # column-level grants, which are identical for both.
+                who = "a demo token" if ident.is_demo else "an ingest key"
+                home = "sandbox" if ident.is_demo else "workspace"
                 what = f"update {table}"
                 if table not in DEMO_TABLES:
                     return self._reply(403, {
-                        "message": f"{what}: permission denied — a demo token "
+                        "message": f"{what}: permission denied — {who} "
                                    "reaches only the fleet tables of its own "
-                                   "sandbox", "code": "42501"})
+                                   f"{home}", "code": "42501"})
                 allowed = DEMO_UPDATE_COLUMNS.get(table)
                 if allowed is not None and not set(body) <= allowed:
                     return self._reply(403, {
-                        "message": f"{what}: permission denied — a demo token "
+                        "message": f"{what}: permission denied — {who} "
                                    f"may only update {sorted(allowed)} on "
                                    f"{table}", "code": "42501"})
                 if body.get("site_id", ident.site_id) != ident.site_id:
                     return self._reply(403, {
                         "message": "new row violates row-level security policy "
-                                   f"for table \"{table}\" — a demo token may "
+                                   f"for table \"{table}\" — {who} may "
                                    "not move a row to another site",
                         "code": "42501"})
                 demo_site = ident.site_id

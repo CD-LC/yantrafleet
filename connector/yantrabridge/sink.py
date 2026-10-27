@@ -8,19 +8,107 @@ retries are idempotent (alert ids are deterministic per occurrence).
 
 Because PostgREST requires every row in one batch to carry identical keys,
 rows are grouped by key-set before sending.
+
+Workspace mode (supabase/0019, docs/WORKSPACES.md): with an INGEST KEY
+(``ingest_key=`` / ``--ingest-key`` / ``YANTRA_INGEST_KEY``) the sink
+writes as a self-serve workspace's own connector — the anon key plus
+``x-yf-ingest-key`` on every request, resolved by 0019's RLS to exactly
+one ``WS-*`` site. The site MUST be that workspace (``WS-<8 hex>``, from
+``site=`` / ``--site`` / ``YANTRA_SITE_ID``; anything else refuses to
+construct), every robot / alert / telemetry id is prefixed ``<site>-``
+because ``robots.id`` is a global primary key shared by every tenant,
+and :meth:`SupabaseSink.heartbeat` becomes a no-op (``fleet_meta`` has no
+``site_id``, so a key cannot reach it — logged once at INFO).
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 import httpx
 
+log = logging.getLogger(__name__)
+
 # Client-safe publishable anon key — fine to embed; override via env vars.
 DEFAULT_SUPABASE_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
 DEFAULT_SUPABASE_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+
+#: 0019 ingest-key contract (public.yf_ingest_key / yf_is_workspace_site).
+#: Duplicated here rather than imported: the connector is a standalone
+#: package a customer runs next to their robots with nothing else installed.
+INGEST_KEY_HEADER = "x-yf-ingest-key"
+INGEST_KEY_ENV = "YANTRA_INGEST_KEY"
+INGEST_KEY_RE = re.compile(r"^yk_[0-9a-f]{64}$")
+WS_SITE_RE = re.compile(r"^WS-[0-9a-f]{8}$")
+
+
+def resolve_ingest_key(key: str | None = None) -> str | None:
+    """Explicit arg > ``YANTRA_INGEST_KEY`` > None (no workspace mode)."""
+    return (key or os.environ.get(INGEST_KEY_ENV) or "").strip() or None
+
+
+def check_ingest_config(key: str | None, site: str | None) -> None:
+    """Refuse to start with a key that cannot work.
+
+    A malformed key is plain anon to 0019's RLS (every write 401s), and a
+    key paired with a non-workspace site stamps rows the policy refuses
+    (``site_id = yf_ingest_site()`` can only ever be the key's own ``WS-*``
+    site). Both are configuration mistakes worth a loud exit at startup.
+    """
+    if key is None:
+        return
+    if not INGEST_KEY_RE.match(key):
+        raise ValueError(
+            "ingest key is malformed — expected 'yk_' followed by 64 lowercase "
+            "hex characters, as workspace_create_ingest_key() returns it")
+    if not site or not WS_SITE_RE.match(site):
+        raise ValueError(
+            f"an ingest key writes exactly one self-serve workspace, and "
+            f"{site!r} is not one — pass --site WS-<8 hex> (or set "
+            "YANTRA_SITE_ID) to the workspace the key was created in (see "
+            "docs/WORKSPACES.md)")
+
+
+def namespace_rows(table: str, rows: list[dict[str, Any]],
+                   site: str) -> list[dict[str, Any]]:
+    """Prefix every id a workspace writer emits with ``<site>-``.
+
+    ``robots.id`` and ``alerts.id`` are global text primary keys shared by
+    every tenant of one project, so two workspaces that both own an
+    ``AGV-001`` must not collide. The console strips the prefix for
+    display. References are rewritten consistently (telemetry and alert
+    ``src`` point at the prefixed robot id) and ``site_id`` is forced to
+    the workspace — the policy would refuse anything else anyway.
+    """
+    prefix = f"{site}-"
+
+    def pre(value: Any) -> Any:
+        if isinstance(value, str) and value and not value.startswith(prefix):
+            return prefix + value
+        return value
+
+    out = []
+    for row in rows:
+        r = dict(row)
+        if table in ("robots", "alerts") and "id" in r:
+            r["id"] = pre(r["id"])
+        if table == "robot_telemetry":
+            r["robot_id"] = pre(r.get("robot_id"))
+        if table == "alerts" and r.get("src") not in (None, "", "fleet"):
+            r["src"] = pre(r["src"])
+        r["site_id"] = site
+        out.append(r)
+    return out
+
+
+def strip_namespace(robot_id: str, site: str) -> str:
+    """The inverse of :func:`namespace_rows` for an id read back."""
+    prefix = f"{site}-"
+    return robot_id[len(prefix):] if robot_id.startswith(prefix) else robot_id
 
 
 def _now_iso() -> str:
@@ -51,6 +139,11 @@ class SupabaseSink:
         offline testing.
     writer_id:
         Identifier written to ``fleet_meta.writer_id`` on heartbeat.
+    ingest_key, site:
+        Workspace mode (see the module docstring). ``ingest_key`` falls
+        back to ``YANTRA_INGEST_KEY``; ``site`` to ``YANTRA_SITE_ID``. A key
+        with a non-``WS-*`` site raises :class:`ValueError` here, at
+        construction, so the failure is one line at startup.
     """
 
     def __init__(
@@ -61,20 +154,39 @@ class SupabaseSink:
         transport: httpx.BaseTransport | None = None,
         writer_id: str = "yantrabridge",
         timeout: float = 10.0,
+        ingest_key: str | None = None,
+        site: str | None = None,
     ) -> None:
         self.url = (url or os.environ.get("SUPABASE_URL") or DEFAULT_SUPABASE_URL).rstrip("/")
         self.key = key or os.environ.get("SUPABASE_KEY") or DEFAULT_SUPABASE_KEY
         self.writer_id = writer_id
+        self.ingest_key = resolve_ingest_key(ingest_key)
+        self.site = (site or os.environ.get("YANTRA_SITE_ID") or "").strip() or None
+        check_ingest_config(self.ingest_key, self.site)
+        self._logged_heartbeat_skip = False
+        headers = {
+            "apikey": self.key,
+            "Authorization": f"Bearer {self.key}",
+            "Content-Type": "application/json",
+        }
+        if self.ingest_key:
+            headers[INGEST_KEY_HEADER] = self.ingest_key
+            log.info("workspace mode: writing site %s with an ingest key — "
+                     "ids namespaced '%s-', fleet_meta skipped", self.site,
+                     self.site)
         self._client = httpx.Client(
             base_url=f"{self.url}/rest/v1",
-            headers={
-                "apikey": self.key,
-                "Authorization": f"Bearer {self.key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             timeout=timeout,
             transport=transport,
         )
+
+    def _shape(self, table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Workspace namespacing when a key is configured, else untouched."""
+        if not self.ingest_key:
+            return rows
+        assert self.site is not None  # check_ingest_config guarantees it
+        return namespace_rows(table, rows, self.site)
 
     # -- low-level ----------------------------------------------------------
 
@@ -99,14 +211,14 @@ class SupabaseSink:
 
     def upsert_robots(self, rows: Iterable[dict[str, Any]]) -> int:
         """Upsert robot rows (merge on id). Returns rows sent."""
-        rows = list(rows)
+        rows = self._shape("robots", list(rows))
         for batch in _group_by_keyset(rows):
             self._post("robots", batch, on_conflict="id", resolution="merge-duplicates")
         return len(rows)
 
     def insert_alerts(self, rows: Iterable[dict[str, Any]]) -> int:
         """Insert alert rows; duplicates (same id) are ignored -> retry-safe."""
-        rows = list(rows)
+        rows = self._shape("alerts", list(rows))
         if rows:
             for batch in _group_by_keyset(rows):
                 self._post("alerts", batch, on_conflict="id",
@@ -122,7 +234,7 @@ class SupabaseSink:
         insert (no on_conflict); rows are chunked to keep request bodies
         small on large imports.
         """
-        rows = list(rows)
+        rows = self._shape("robot_telemetry", list(rows))
         for group in _group_by_keyset(rows):
             for i in range(0, len(group), chunk_size):
                 resp = self._client.post(
@@ -138,7 +250,17 @@ class SupabaseSink:
 
         Only touches writer_id/updated_at, so sim_min/throughput written by
         other writers are preserved (PostgREST updates only supplied columns).
+
+        In workspace mode this is a no-op: ``fleet_meta`` has no ``site_id``,
+        so 0019 keeps it off-limits to an ingest key and there is nothing to
+        scope a heartbeat by. Said once, at INFO, not once per batch.
         """
+        if self.ingest_key:
+            if not self._logged_heartbeat_skip:
+                self._logged_heartbeat_skip = True
+                log.info("workspace mode: fleet_meta heartbeat skipped (the "
+                         "table has no site_id; an ingest key cannot write it)")
+            return
         self._post(
             "fleet_meta",
             [{"id": 1, "writer_id": self.writer_id, "updated_at": _now_iso()}],

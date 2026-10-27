@@ -7,8 +7,16 @@
 #   GET  /api/demo/limits   -> whether the button is worth showing
 #   GET  /healthz           -> liveness
 #
+# It also serves the self-serve workspace routes (supabase/0019):
+#   POST /api/workspace/sim/start   -> a signed-in admin's simulated fleet
+#   POST /api/workspace/sim/stop
+#   GET  /api/workspace/sim/status
+# These forward the caller's own JWT to PostgREST and hold no privilege of
+# their own; --workspace-max-live caps the simulators they fork (counted
+# separately from --max-live). Until 0019 is applied they answer 503.
+#
 # Binds 127.0.0.1:8088 only — nginx proxies /api/demo/ to it (see
-# deploy/aws/nginx/yantrafleet.conf.template). --trusted-proxy-hops 1 tells
+# deploy/aws/nginx/yantrafleet.conf.template; /api/workspace/ too). --trusted-proxy-hops 1 tells
 # it that exactly one reverse proxy appends to X-Forwarded-For, so the
 # per-IP rate limit is charged to the visitor and not to nginx.
 #
@@ -38,6 +46,7 @@ ExecStart=/opt/yantrafleet/.venv/bin/python -m yantraops sandbox-serve \
     --state-file /var/lib/yantrafleet/sandboxes.json \
     --robots 6 --origin marketing \
     --max-live 8 --rate 3 --rate-window 900 --max-inflight 2 \
+    --workspace-max-live 12 \
     --trusted-proxy-hops 1 --sweep-interval 60
 Restart=always
 RestartSec=5

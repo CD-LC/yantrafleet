@@ -165,7 +165,8 @@ def test_opt_in_migrations_gated_by_default(tmp_path):
 #: lock the project down; 0008 needs 0007's yf_has_role; 0009-0016 all build
 #: on 0007 (and 0009's yf_can_read_site), and 0009 in particular hands
 #: anonymous visitors a scoped write path — none of them may ever be applied
-#: to a demo project by a plain `yantraops migrate`.
+#: to a demo project by a plain `yantraops migrate`. 0019 (workspaces) adds a
+#: second anon write path (ingest keys) and a trigger on auth.users.
 OPT_IN_MIGRATIONS = (
     "0006_harden.sql",
     "0007_rbac.sql",
@@ -180,6 +181,7 @@ OPT_IN_MIGRATIONS = (
     "0016_public_status.sql",
     "0017_demo_command_scope.sql",
     "0018_app_config.sql",
+    "0019_workspaces.sql",
 )
 
 #: The baseline files a plain `migrate` run applies. Listed explicitly so a
@@ -262,3 +264,4 @@ def test_new_migrations_are_ordered_after_rbac():
                  "0017_demo_command_scope.sql"):
         assert names.index(name) > rbac
     assert names.index("0018_app_config.sql") > rbac
+    assert names.index("0019_workspaces.sql") > rbac

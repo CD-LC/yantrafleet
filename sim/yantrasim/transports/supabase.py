@@ -17,11 +17,23 @@ site (``site=`` / ``YANTRA_SITE_ID`` / ``BLR-DC1`` — the same resolution
 that stamps every row this transport writes), because the service key it
 usually carries bypasses RLS and would otherwise execute a command an
 anonymous demo-sandbox visitor queued. ``site="*"`` opts out loudly.
+
+v0.13 workspaces (supabase/0019, docs/WORKSPACES.md): with an INGEST KEY
+(``ingest_key=`` / ``--ingest-key`` / ``YANTRA_INGEST_KEY``) this
+transport writes as a self-serve workspace's own robot connector — the
+anon key plus ``x-yf-ingest-key`` on every request, which 0019's RLS
+resolves to exactly one ``WS-*`` site. Three things follow, all
+automatic once a key is configured: the site MUST be that workspace
+(``WS-<8 hex>``; anything else refuses to start), every robot / alert /
+mission / telemetry id is prefixed ``<site>-`` because ``robots.id`` is a
+global primary key shared by every tenant, and ``fleet_meta`` is never
+written (it has no ``site_id``, so a key cannot reach it — logged once).
 """
 from __future__ import annotations
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -41,6 +53,14 @@ DEFAULT_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
 #: :func:`resolve_site` and ``docs/SECURITY.md``.
 ANY_SITE = "*"
 
+#: 0019 ingest-key contract (public.yf_ingest_key / yf_is_workspace_site).
+#: Duplicated here rather than imported from yantraops: the simulator is a
+#: standalone package a customer may run with nothing else installed.
+INGEST_KEY_HEADER = "x-yf-ingest-key"
+INGEST_KEY_ENV = "YANTRA_INGEST_KEY"
+INGEST_KEY_RE = re.compile(r"^yk_[0-9a-f]{64}$")
+WS_SITE_RE = re.compile(r"^WS-[0-9a-f]{8}$")
+
 
 def resolve_config(url: str | None = None, key: str | None = None) -> tuple[str, str]:
     """Precedence: explicit arg > env var > embedded default."""
@@ -48,6 +68,75 @@ def resolve_config(url: str | None = None, key: str | None = None) -> tuple[str,
         (url or os.environ.get("SUPABASE_URL") or DEFAULT_URL).rstrip("/"),
         key or os.environ.get("SUPABASE_KEY") or DEFAULT_KEY,
     )
+
+
+def resolve_ingest_key(key: str | None = None) -> str | None:
+    """Explicit arg > ``YANTRA_INGEST_KEY`` > None (no workspace mode)."""
+    return (key or os.environ.get(INGEST_KEY_ENV) or "").strip() or None
+
+
+def check_ingest_config(key: str | None, site: str) -> None:
+    """Refuse to start with a key that cannot work.
+
+    A malformed key would be plain anon to 0019's RLS (every write 401s),
+    and a key with a non-workspace site would stamp rows the policy then
+    refuses (``site_id = yf_ingest_site()`` can only ever be the key's own
+    ``WS-*`` site). Both are configuration mistakes worth a loud exit at
+    startup rather than a warning per tick forever.
+    """
+    if key is None:
+        return
+    if not INGEST_KEY_RE.match(key):
+        raise ValueError(
+            "ingest key is malformed — expected 'yk_' followed by 64 lowercase "
+            "hex characters, as workspace_create_ingest_key() returns it")
+    if not WS_SITE_RE.match(site):
+        raise ValueError(
+            f"an ingest key writes exactly one self-serve workspace, and {site!r} "
+            "is not one — pass --site WS-<8 hex> (or set YANTRA_SITE_ID) to the "
+            "workspace the key was created in (see docs/WORKSPACES.md)")
+
+
+def namespace_rows(table: str, rows: list[dict[str, Any]],
+                   site: str) -> list[dict[str, Any]]:
+    """Prefix every id a workspace writer emits with ``<site>-``.
+
+    ``robots.id``, ``alerts.id`` and ``missions.id`` are global text
+    primary keys shared by every tenant of one project, so two workspaces
+    that both own an ``AMR-01`` must not collide. The console strips the
+    prefix for display. References are rewritten consistently (telemetry
+    and alert ``src`` point at the prefixed robot id, a mission's crew list
+    too) so nothing in the workspace dangles, and ``site_id`` is forced to
+    the workspace regardless of what ``yantracore.site_id()`` says — the
+    policy would refuse anything else anyway.
+    """
+    prefix = f"{site}-"
+
+    def pre(value: Any) -> Any:
+        if isinstance(value, str) and value and not value.startswith(prefix):
+            return prefix + value
+        return value
+
+    out = []
+    for row in rows:
+        r = dict(row)
+        if table in ("robots", "alerts", "missions") and "id" in r:
+            r["id"] = pre(r["id"])
+        if table == "robot_telemetry":
+            r["robot_id"] = pre(r.get("robot_id"))
+        if table == "alerts" and r.get("src") not in (None, "", "fleet"):
+            r["src"] = pre(r["src"])
+        if table == "missions" and isinstance(r.get("robots"), list):
+            r["robots"] = [pre(x) for x in r["robots"]]
+        r["site_id"] = site
+        out.append(r)
+    return out
+
+
+def strip_namespace(robot_id: str, site: str) -> str:
+    """The inverse of :func:`namespace_rows` for an id read back."""
+    prefix = f"{site}-"
+    return robot_id[len(prefix):] if robot_id.startswith(prefix) else robot_id
 
 
 def resolve_site(site: str | None = None) -> str:
@@ -80,14 +169,24 @@ class SupabaseTransport:
         timeout_s: float = 10.0,
         history_every: int = 3,
         site: str | None = None,
+        ingest_key: str | None = None,
     ) -> None:
         self.base_url, self.key = resolve_config(url, key)
         self.rest = f"{self.base_url}/rest/v1"
         self.writer_id = writer_id
         self.history_every = history_every
         self.site = resolve_site(site)
+        #: 0019: the workspace ingest key, or None for the classic
+        #: service/anon-key writer. Validated against the site up front.
+        self.ingest_key = resolve_ingest_key(ingest_key)
+        check_ingest_config(self.ingest_key, self.site)
         self._warned_missing_site = False
+        self._logged_fleet_meta_skip = False
         self._client = client or httpx.Client(timeout=timeout_s)
+        if self.ingest_key:
+            log.info("workspace mode: writing site %s with an ingest key — "
+                     "ids namespaced '%s-', fleet_meta skipped", self.site,
+                     self.site)
         if self.site == ANY_SITE:
             log.warning(
                 "command gate: site filter DISABLED (site='%s') — this "
@@ -103,22 +202,40 @@ class SupabaseTransport:
     def publish(self, out: TickOutput) -> None:
         ts = out.states[0]["timestamp"] if out.states else ""
         rows = [robot_row(s, out.extras[self._rid(s, out)]) for s in out.states]
-        self._post("robots", rows, on_conflict="id", merge=True)
+        self._post("robots", self._shape("robots", rows), on_conflict="id",
+                   merge=True)
         if out.events:
             alerts = [alert_row(e, ts) for e in out.events]
-            self._post("alerts", alerts, on_conflict="id", merge=False)
-        meta = fleet_meta_row(self.writer_id, out.sim_time_s, out.throughput_per_h, ts)
-        self._post("fleet_meta", [meta], on_conflict="id", merge=True)
+            self._post("alerts", self._shape("alerts", alerts),
+                       on_conflict="id", merge=False)
+        if self.ingest_key:
+            # fleet_meta has no site_id: 0019 keeps it off-limits to a key,
+            # and there is nothing to scope it by. Said once, not per tick.
+            if not self._logged_fleet_meta_skip:
+                self._logged_fleet_meta_skip = True
+                log.info("workspace mode: fleet_meta heartbeat skipped (the "
+                         "table has no site_id; an ingest key cannot write it)")
+        else:
+            meta = fleet_meta_row(self.writer_id, out.sim_time_s,
+                                  out.throughput_per_h, ts)
+            self._post("fleet_meta", [meta], on_conflict="id", merge=True)
         # v0.5: missions snapshot — rows are already table-shaped
         # (id,name,robots,state,prog,eta,created_at); merge keeps progress
         # updates idempotent under retries.
         if out.missions:
-            self._post("missions", out.missions, on_conflict="id", merge=True)
+            self._post("missions", self._shape("missions", out.missions),
+                       on_conflict="id", merge=True)
         # v0.3: downsampled history for replay/analytics (every Nth tick).
         if self.history_every and out.tick % self.history_every == 0:
             samples = [telemetry_row(s, out.extras[self._rid(s, out)], ts)
                        for s in out.states]
-            self._insert("robot_telemetry", samples)
+            self._insert("robot_telemetry", self._shape("robot_telemetry", samples))
+
+    def _shape(self, table: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Workspace namespacing when a key is configured, else untouched."""
+        if not self.ingest_key:
+            return rows
+        return namespace_rows(table, rows, self.site)
 
     def _insert(self, table: str, rows: list) -> None:
         """Append-only insert (history tables); failures logged, not fatal."""
@@ -134,11 +251,14 @@ class SupabaseTransport:
             log.warning("supabase %s INSERT failed: %s", table, exc)
 
     def _headers(self) -> dict[str, str]:
-        return {
+        h = {
             "apikey": self.key,
             "Authorization": f"Bearer {self.key}",
             "Content-Type": "application/json",
         }
+        if self.ingest_key:
+            h[INGEST_KEY_HEADER] = self.ingest_key
+        return h
 
     def poll_commands(self, apply_fn) -> int:
         """v0.2 human-in-the-loop gate, executor side.
@@ -176,7 +296,12 @@ class SupabaseTransport:
         rows = [row for row in rows if self._site_ok(row)]
         done = 0
         for row in rows:
-            ok, detail = apply_fn(row.get("robot_id", ""), row.get("cmd", ""))
+            robot_id = str(row.get("robot_id") or "")
+            if self.ingest_key:
+                # The console queued the command against the namespaced id
+                # (WS-xxxx-AMR-01); the simulator knows the robot as AMR-01.
+                robot_id = strip_namespace(robot_id, self.site)
+            ok, detail = apply_fn(robot_id, row.get("cmd", ""))
             body = {"status": "executed" if ok else "failed", "note": detail,
                     "executed_at": datetime.now(timezone.utc).isoformat()}
             try:
@@ -251,9 +376,7 @@ class SupabaseTransport:
                 params={"on_conflict": on_conflict},
                 json=rows,
                 headers={
-                    "apikey": self.key,
-                    "Authorization": f"Bearer {self.key}",
-                    "Content-Type": "application/json",
+                    **self._headers(),
                     "Prefer": f"resolution={resolution}, return=minimal",
                 },
             )

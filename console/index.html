@@ -1,8 +1,27 @@
 <!DOCTYPE html>
 <!-- ================================================================
-  Yantrika CONSOLE — FleetMind ops console + Sarathi copilot bridge
+  Yantrika CONSOLE — fleet ops console (formerly FleetMind) + Sarathi copilot bridge
   =================================================================
   CONFIG (all optional — the console degrades gracefully):
+
+  0. Modes (v0.13 — one file, four ways in; see docs/WORKSPACES.md §5)
+     - ?mode=demo  or  #demo   → DEMO: local mock data only, no backend
+                                 calls, no sign-in prompt, guided tour on.
+                                 Linked from the marketing page as
+                                 "See the demo (no login)".
+     - ?demo=<token>           → SANDBOX: a zero-signup live fleet minted by
+                                 supabase/0009 — the token goes out as the
+                                 x-yf-demo-token header on every PostgREST
+                                 call, fleet_meta is never touched, and a
+                                 countdown chip shows the time left.
+     - signed in               → WORKSPACE: rpc/my_workspace() names the
+                                 person's own site; every query is scoped
+                                 to it and the Workspace view manages
+                                 ingest keys, members and the simulated
+                                 fleet (supabase/0019_workspaces.sql).
+     - #signup / #signin       → open the account modal on that tab (hash,
+                                 not query, so nginx's bare-/console/
+                                 redirect cannot drop it).
 
   1. Sarathi live agent (Copilot backend)
      - Endpoint : POST http://localhost:8001/ask   (see Copilot.SARATHI_URL)
@@ -61,7 +80,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FleetMind — Fleet Operations (Live)</title>
+<title>Yantrika — Fleet Operations</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0d0d0d">
 <link rel="icon" href="/assets/brand/favicon.ico" sizes="any">
 <link rel="icon" href="/assets/brand/icon-mark.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/assets/brand/icon-180.png">
@@ -289,39 +310,94 @@ svg text{font-family:var(--font)}
 #tour-card .row .sk{margin-right:auto}
 
 @media(max-width:1100px){.g4{grid-template-columns:1fr 1fr}.g31,.g13,.g2{grid-template-columns:1fr}}
+
+/* ============ v0.13: mode banner (demo / sandbox) ============ */
+#banner{grid-column:1/3;display:none;align-items:center;gap:12px;padding:7px 16px;font-size:12.5px;background:#12253f;border-bottom:1px solid #2a4a75;color:#cfe0f8}
+#banner.on{display:flex}
+#banner b{color:#fff}
+#banner .acts{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+#banner .btn{padding:4px 11px;font-size:12px}
+#banner .btn.cta{background:#fff;border-color:#fff;color:#0d1b33}
+#banner .btn.cta:hover{background:#eaf1ff}
+#app.has-banner{grid-template-rows:52px auto 1fr}
+#chip-sandbox{border-color:#2a4a75;color:#9ec5f4}
+#chip-sandbox b{font-variant-numeric:tabular-nums;color:#fff}
+
+/* ============ v0.13: get-started + workspace ============ */
+.gs{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:12px}
+.gs .opt{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.gs .opt h4{font-size:13px;display:flex;align-items:center;gap:8px}
+.gs .opt p{font-size:12px;color:var(--ink2);flex:1}
+.gs .opt .n{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:6px;background:#12253f;color:#9ec5f4;font-size:11px;font-weight:700}
+.codeblk{position:relative;background:#0a0a0a;border:1px solid var(--border2);border-radius:6px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px;line-height:1.55;color:#dcdad0;overflow-x:auto;white-space:pre;margin:8px 0}
+.codeblk .cp{position:absolute;top:6px;right:6px}
+.codeblk .k{color:#9ec5f4}.codeblk .c{color:#6f6e66}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:6px 0 10px;flex-wrap:wrap}
+.tabs button{background:none;border:none;color:var(--muted);padding:7px 11px;font-size:12.5px;font-weight:600;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.keyrow{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);font-size:12.5px}
+.keyrow code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface3);border:1px solid var(--border2);border-radius:4px;padding:1px 7px;font-size:11.5px}
+.inp{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--ink);padding:7px 10px;font-size:12.5px;font-family:inherit;outline:none}
+.inp:focus{border-color:#2a4a75}
+select.inp{padding:6px 8px}
+.plan{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:4px;padding:1px 7px;background:#1a2a1a;border:1px solid #2e4b2e;color:#8fd79a}
+
+/* ============ v0.13: generic modal ============ */
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:250;display:none;align-items:center;justify-content:center}
+#modal.open{display:flex}
+#modal .box{width:440px;max-width:94vw;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 24px 60px rgba(0,0,0,.6);padding:20px 22px 18px}
+#modal .box h2{font-size:16px;margin-bottom:6px}
+#modal .box p{font-size:12.5px;color:var(--ink2);line-height:1.55}
+#modal .box .row{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+
+/* ============ v0.13: small screens ============ */
+@media(max-width:860px){
+  #app{grid-template-columns:54px 1fr}
+  nav{padding:10px 6px}
+  nav .sec,nav button span,nav button .badge,.nav-foot{display:none}
+  nav button{justify-content:center;padding:9px 0}
+  nav button .ic{width:auto;font-size:15px}
+  .site-sel,#h-clock,#chip-health,#btn-academy,#btn-tour{display:none}
+  .logo{min-width:0}
+  .view{padding:14px 12px}
+  .g4{grid-template-columns:1fr 1fr}
+  .drawer,#copilot{width:min(92vw,390px)}
+}
 </style>
 </head>
 <body>
 <div id="app">
 <header>
-  <div class="logo"><div class="mark">⬡</div>FleetMind <span class="pill" style="margin-left:2px">DEMO · mock data</span></div>
-  <div class="site-sel">📍 <b>BLR-DC1</b> · Bengaluru Fulfillment Center <span style="color:var(--muted)">▾</span></div>
+  <div class="logo"><div class="mark">⬡</div>Yantrika <span class="pill" id="mode-pill" style="margin-left:2px">console</span></div>
+  <div class="site-sel" id="site-sel" title="Site / workspace">📍 <b id="site-name">BLR-DC1</b> <span id="site-sub" style="color:var(--muted)">· Bengaluru Fulfillment Center</span></div>
   <div class="spacer"></div>
   <div class="chip" id="chip-health"><span class="dot" style="background:var(--good)"></span>Fleet health <b id="h-health" style="color:var(--ink)">—</b></div>
   <div class="chip" title="ISA-18.2 alarm budget: ≤12/hr per operator"><span id="alarm-dot" class="dot" style="background:var(--good)"></span><span id="h-alarmrate">— alarms/hr</span></div>
   <div class="chip" id="h-clock">14:32</div>
-  <div class="chip" id="chip-cloud" title="Supabase sync status"><span class="dot" id="cloud-dot" style="background:var(--muted)"></span><span id="cloud-lbl">connecting…</span></div>
+  <div class="chip" id="chip-sandbox" style="display:none" title="This sandbox fleet deletes itself when the timer runs out">⏳ sandbox <b id="sandbox-left">—</b></div>
+  <div class="chip" id="chip-cloud" title="Backend sync status"><span class="dot" id="cloud-dot" style="background:var(--muted)"></span><span id="cloud-lbl">connecting…</span></div>
   <button class="copilot-btn" id="btn-copilot" onclick="Copilot.toggle()">✦ Copilot <span class="kbd">⌘J</span></button>
   <a class="copilot-btn" id="btn-academy" href="academy/index.html" target="_blank" rel="noopener" title="Yantrika Academy — operator training on this backend">🎓 Academy</a>
   <button class="btn ghost sm" id="btn-tour" title="Replay the first-run tour" onclick="Tour.start()">?</button>
   <span id="auth-box" style="display:flex;align-items:center;gap:8px"></span>
-  <div class="avatar">PN</div>
+  <div class="avatar" id="avatar" title="Not signed in">?</div>
 </header>
+<div id="banner" role="status"></div>
 <nav id="nav">
   <div class="sec">Operate</div>
-  <button data-v="overview" class="on"><i class="ic">◫</i>Overview</button>
-  <button data-v="liveops"><i class="ic">⌖</i>Live Ops</button>
-  <button data-v="incidents"><i class="ic">⚠</i>Incidents <span class="badge" id="n-inc">3</span></button>
-  <button data-v="missions"><i class="ic">➤</i>Missions</button>
+  <button data-v="overview" class="on"><i class="ic">◫</i><span>Overview</span></button>
+  <button data-v="liveops"><i class="ic">⌖</i><span>Live Ops</span></button>
+  <button data-v="incidents"><i class="ic">⚠</i><span>Incidents</span> <span class="badge" id="n-inc">3</span></button>
+  <button data-v="missions"><i class="ic">➤</i><span>Missions</span></button>
   <div class="sec">Improve</div>
-  <button data-v="maint"><i class="ic">🔧</i>Maintenance <span class="badge z" id="n-maint">2</span></button>
-  <button data-v="analytics"><i class="ic">∿</i>Analytics</button>
+  <button data-v="maint"><i class="ic">🔧</i><span>Maintenance</span> <span class="badge z" id="n-maint">2</span></button>
+  <button data-v="analytics"><i class="ic">∿</i><span>Analytics</span></button>
   <div class="sec">Configure</div>
-  <button data-v="fleet"><i class="ic">⬡</i>Fleet &amp; Connectors</button>
-  <button data-v="audit"><i class="ic">☰</i>Audit</button>
-  <button data-v="settings" id="nav-settings" style="display:none"><i class="ic">⚙</i>Settings</button>
-  <button data-v="config" id="nav-config" style="display:none"><i class="ic">🛠</i>Config</button>
-  <div class="nav-foot"><span class="pill" id="yf-version" title="Yantrika release — matches core/yantracore/version.py"></span><br>VDA 5050 · 3 vendors<br><span style="color:#0ca30c">●</span> Sim feed connected</div>
+  <button data-v="fleet" id="nav-fleet"><i class="ic">⬡</i><span>Workspace &amp; Connect</span></button>
+  <button data-v="audit"><i class="ic">☰</i><span>Audit</span></button>
+  <button data-v="settings" id="nav-settings" style="display:none"><i class="ic">⚙</i><span>Settings</span></button>
+  <button data-v="config" id="nav-config" style="display:none"><i class="ic">🛠</i><span>Config</span></button>
+  <div class="nav-foot"><span class="pill" id="yf-version" title="Yantrika release — matches core/yantracore/version.py"></span><br><span id="nav-foot-sub">VDA 5050 v2.1 · multi-vendor</span></div>
 </nav>
 <main id="main">
   <div class="view on" id="v-overview"></div>
@@ -348,8 +424,66 @@ svg text{font-family:var(--font)}
    ================================================================ */
 /* Release version shown in the sidebar footer chip. Release commits bump
    this — keep it matching core/yantracore/version.py (the single source). */
-const YF_VERSION='0.12.1';
+const YF_VERSION='0.13.0';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+
+/* ================= v0.13 runtime config — read once, up front =================
+   Backend + mode come from the URL (see the CONFIG block at the top):
+     ?supa=<PostgREST base url>  overrides SUPA_URL
+     ?key=<anon key>             overrides SUPA_KEY
+     ?site=<site id>             window.SITE — scopes every table query
+     ?demo=<token>               sandbox token (0009) → x-yf-demo-token
+     ?mode=demo | #demo | #mock  mock-data demo, no backend at all
+     ?door=<url>                 the yantraops door base (default: same
+                                 origin when served, localhost:8088 on file://)
+     ?ask=<url>                  Sarathi /ask override (default: same-origin
+                                 /ask when served from a real host)        */
+const _cfg=new URLSearchParams(location.search);
+const _hash=(location.hash||'').replace(/^#/,'').toLowerCase();
+const SUPA_URL=_cfg.get('supa')||'https://flwyvhsmgrrqpmhcqlzd.supabase.co';
+const SUPA_KEY=_cfg.get('key')||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
+const MOCK_MODE=_cfg.get('mode')==='demo'||_cfg.get('demo')==='mock'||_hash==='demo'||_hash==='mock';
+const DEMO_TOKEN=(!MOCK_MODE&&/^[0-9a-f]{32,128}$/.test(_cfg.get('demo')||''))?_cfg.get('demo'):null;
+window.SITE=_cfg.get('site')||null;
+/* Served from a real host (nginx) the yantraops door and Sarathi sit on
+   this same origin under /api/… and /ask; from file:// or a bare static
+   server they are the loopback ports `yantraops up` prints. */
+const _served=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+const DOOR_BASE=(_cfg.get('door')||(_served?location.origin:'http://localhost:8088')).replace(/\/$/,'');
+/* Everything a workspace needs to know about its site: 'WS-…' from 0019
+   (self-serve), 'DEMO-…' from 0009 (sandbox) or a legacy operator site. */
+const isWorkspaceSite=s=>/^WS-[0-9a-f]{8}$/i.test(String(s||''));
+const isDemoSite=s=>/^DEMO-/i.test(String(s||''));
+/* Row ids written by a workspace/sandbox writer are namespaced with the
+   site id (robots.id is a global primary key); strip it for display. */
+const dispId=id=>{const s=String(id==null?'':id);
+  const m=s.match(/^((?:WS|DEMO)-[0-9A-Za-z]+)-(.+)$/);
+  if(m&&(!window.SITE||m[1].toLowerCase()===String(window.SITE).toLowerCase()))return m[2];
+  if(window.SITE&&s.startsWith(window.SITE+'-'))return s.slice(window.SITE.length+1);
+  return s;};
+const rl=r=>r&&(r.label||dispId(r.id));
+/** Human name of the site on screen: the workspace name when signed in,
+    "Sandbox" for a 0009 fleet, the legacy BLR-DC1 label otherwise. */
+function siteLabel(withId){
+  const ws=(typeof Workspace!=='undefined'&&Workspace.ws)||null;
+  if(ws&&ws.site_id)return withId?ws.name+' · '+ws.site_id:ws.name;
+  if(DEMO_TOKEN||isDemoSite(window.SITE))return withId?'Sandbox fleet · '+(window.SITE||'DEMO'):'Sandbox fleet';
+  if(window.SITE)return window.SITE==='BLR-DC1'?(withId?'BLR-DC1 · Bengaluru Fulfillment Center':'BLR-DC1'):window.SITE;
+  return withId?'BLR-DC1 · Bengaluru Fulfillment Center':'BLR-DC1';
+}
+/** Tiny generic modal (sandbox expiry, new ingest key, confirmations). */
+const Modal={
+  ensure(){if($('#modal'))return;const d=document.createElement('div');d.id='modal';d.innerHTML='<div class="box"></div>';document.body.appendChild(d);
+    d.addEventListener('mousedown',e=>{if(e.target===d&&!d.dataset.sticky)Modal.close();});},
+  show(html,{sticky=false}={}){this.ensure();const d=$('#modal');d.dataset.sticky=sticky?'1':'';d.querySelector('.box').innerHTML=html;d.classList.add('open');},
+  close(){const d=$('#modal');if(d)d.classList.remove('open');}
+};
+/** Clipboard with a textarea fallback (file:// and older contexts). */
+function copyText(txt,label){
+  const done=()=>toast((label||'Copied')+' ✓');
+  const fb=()=>{const ta=document.createElement('textarea');ta.value=txt;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){toast('Copy failed — select the text manually');}ta.remove();};
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(txt).then(done,fb);else fb();
+}
 const fmt=n=>n.toLocaleString('en-IN');
 const pad=n=>String(n).padStart(2,'0');
 let simMin = 14*60+32;                       // sim clock 14:32
@@ -393,18 +527,27 @@ const PICKS=['a1','a2','a3','a4','a5','a6','b1','b2','b4','b5','b6'], DROPS=['p1
 /* ---------------- Fleet state ---------------- */
 const VENDORS=['Ati Sherpa','MiR 250','OTTO 600'];
 const robots=[];
-for(let i=1;i<=10;i++){
+/** One robot object — the shape every view renders. v0.13: also used to
+    adopt rows the console has never seen (a workspace's own robots, a
+    sandbox's `<site>-R01` fleet) so the console is no longer hard-wired to
+    ten robots called AMR-01…10. */
+function mkRobot(id,vendor,i){
+  i=i==null?robots.length+1:i;
   const wp=Object.keys(WP)[Math.floor(rnd(0,Object.keys(WP).length))];
-  robots.push({
-    id:'AMR-'+pad(i), vendor:VENDORS[i%3], fw:'2.'+(3+i%4)+'.1',
+  return {
+    id, label:dispId(id), vendor:vendor||VENDORS[i%3], fw:'2.'+(3+i%4)+'.1',
     status:'active',                    // active|charging|idle|fault|paused
     node:wp, pos:[...WP[wp]], path:[], seg:0, prog:0,
     battery:rnd(45,95), speedMax:rnd(1.2,1.7), speed:0,
     tasksDone:Math.floor(rnd(38,86)), task:null,
     health:rnd(84,99), motorTemp:rnd(38,52), errs:Math.floor(rnd(0,3)),
     spdHist:Array.from({length:40},()=>0), batHist:[], log:[]
-  });
+  };
 }
+/* The mock fleet: shown in DEMO mode and while a backend is still being
+   reached. Against a live backend the rows that arrive replace it (see
+   Sync.pull / Sync.adoptRows). */
+for(let i=1;i<=10;i++)robots.push(mkRobot('AMR-'+pad(i),VENDORS[i%3],i));
 // scripted actors for the demo narrative
 robots[6].status='fault'; robots[6].battery=61; robots[6].node='b3'; robots[6].pos=[...WP.b3]; robots[6].faultMsg='Localization confidence 0.31 — position lost';
 robots[2].health=71; robots[2].motorTemp=63;           // maintenance story
@@ -504,9 +647,10 @@ function step(dt){
   store.throughput=Math.round(112+active*3.2+Math.sin(simMin/8)*5+(recovering?-6:2)+rnd(-2,2));
   if(tick%4===0){store.thrHist.push({t:simMin,v:store.throughput});if(store.thrHist.length>60)store.thrHist.shift();}
   store.alarmHr=Math.max(2,Math.round(store.alerts.filter(a=>!a.ack&&typeof a.t==='number'&&simMin-a.t<60).length+2));
-  // occasional ambient events
-  if(tick%90===0){const r=robots[Math.floor(rnd(0,10))];if(r.status==='active')pushAlert('info','Path re-planned for '+r.id+' (congestion avoidance)',r.id);}
-  if(tick%140===70)pushAlert('warn',robots[4].id+' pick verification retry at '+robots[4].node.toUpperCase(),robots[4].id);
+  // occasional ambient events (mock narrative only — a live backend brings its own alerts)
+  if(!robots.length||liveNow())return;
+  if(tick%90===0){const r=robots[Math.floor(rnd(0,robots.length))];if(r&&r.status==='active')pushAlert('info','Path re-planned for '+rl(r)+' (congestion avoidance)',r.id);}
+  if(tick%140===70&&robots[4])pushAlert('warn',rl(robots[4])+' pick verification retry at '+String(robots[4].node||'').toUpperCase(),robots[4].id);
 }
 
 /* ================= Chart helpers (hand-rolled SVG, dataviz spec) ================= */
@@ -518,6 +662,8 @@ function showTip(html,x,y){tip.innerHTML=html;tip.style.display='block';
 function hideTip(){tip.style.display='none';}
 
 function lineChart(el,data,{h=150,color='var(--s1)',unit='',label='value',fmtX=t=>clock2(t)}={}){
+  if(!el)return;
+  if(!Array.isArray(data)||data.length<2){el.innerHTML=`<div class="empty" style="height:${h}px;display:grid;place-items:center">Collecting ${label} samples…</div>`;return;}
   const w=el.clientWidth||600, P={l:34,r:8,t:8,b:20};
   const vs=data.map(d=>d.v), min=Math.min(...vs), max=Math.max(...vs), pad=(max-min)*0.15||10;
   const y0=Math.max(0,min-pad), y1=max+pad;
@@ -588,12 +734,13 @@ const batTextColor=b=>b>50?'var(--s3)':b>25?'var(--warn)':'var(--crit-text)';
 
 /* ================= Views ================= */
 function fleetStats(){
+  const n=robots.length||1;   // an empty fleet (fresh workspace) must not NaN every tile
   const on=robots.filter(r=>r.status!=='fault').length;
   const faults=robots.filter(r=>r.status==='fault').length;
-  const avgB=robots.reduce((s,r)=>s+r.battery,0)/robots.length;
-  const health=Math.round(100 - faults*9 - store.alerts.filter(a=>!a.ack&&a.sev!=='info').length*2.5 - (avgB<35?6:0));
+  const avgB=robots.length?robots.reduce((s,r)=>s+r.battery,0)/n:0;
+  const health=robots.length?Math.max(0,Math.round(100 - faults*9 - store.alerts.filter(a=>!a.ack&&a.sev!=='info').length*2.5 - (avgB<35?6:0))):0;
   const tasks=robots.reduce((s,r)=>s+r.tasksDone,0);
-  return {on,faults,avgB,health,tasks,util:Math.round(robots.filter(r=>r.status==='active').length/robots.length*100)};
+  return {on,faults,avgB,health,tasks,util:Math.round(robots.filter(r=>r.status==='active').length/n*100)};
 }
 /* v0.9 SLA card sampling: one status sample per robot per UI tick (~0.4 s).
    In follower mode the tick reflects the latest synced pull, so the ratio
@@ -603,42 +750,81 @@ function sampleAvail(){
   store.availTot+=robots.length;
 }
 
-/* v0.12: quick-demo seed hint — see Sync.emptyFleet() for the trigger. */
+/* v0.12: quick-demo seed hint — see Sync.emptyFleet() for the trigger.
+   v0.13: in a self-serve workspace the same moment becomes the "Get
+   started" card — one click starts a simulated fleet, the next tab shows
+   how to connect real robots. */
 function emptyFleetCard(){
   if(typeof Sync==='undefined'||!Sync.emptyFleet())return '';
+  if(typeof Workspace!=='undefined'&&Workspace.active()){
+    const ws=Workspace.ws, sim=ws.sim||{};
+    return `<div class="card" id="ov-empty" style="margin-bottom:14px;border-color:#2a4a75;background:#12253f22">
+      <h3>👋 Welcome to ${Copilot.esc(ws.name||'your workspace')} <span class="right">site <code>${Copilot.esc(ws.site_id)}</code> · nothing is publishing yet</span></h3>
+      <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">Your workspace is live and empty. Three ways to put a fleet on this screen:</div>
+      <div class="gs">
+        <div class="opt"><h4><span class="n">1</span>Start a simulated fleet</h4><p>Eight simulated AMRs on a warehouse grid — faults, charging, missions and incidents included. Runs for 4 hours, restart any time. Nothing to install.</p>
+          ${sim.running?`<button class="btn sm" disabled>Simulated fleet starting…</button>`:`<button class="btn sm primary" id="gs-sim" onclick="Workspace.simStart()">▶ Start simulated fleet</button>`}</div>
+        <div class="opt"><h4><span class="n">2</span>Connect your robots</h4><p>Create an ingest key and point <code>yantrabridge</code> at your VDA 5050 broker — or push rows over REST from anything that can speak HTTPS.</p>
+          <button class="btn sm" onclick="go('fleet');Workspace.tab('connect')">Connect robots →</button></div>
+        <div class="opt"><h4><span class="n">3</span>Invite your team</h4><p>Operators, engineers and managers get role-scoped access to exactly this workspace. Approvals and audit are attributed to real people.</p>
+          <button class="btn sm" onclick="go('fleet');Workspace.tab('team')">Invite people →</button></div>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:10px">This card disappears as soon as robot rows arrive — the console never writes fleet data on its own.</div>
+    </div>`;
+  }
   return `<div class="card" id="ov-empty" style="margin-bottom:14px;border-color:#2a4a75;background:#12253f22">
     <h3>🛰 No fleet data yet</h3>
-    <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">The backend is reachable but the <b>robots</b> table is empty — nothing is publishing telemetry.
+    <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">The backend is reachable but the <b>robots</b> table is empty${window.SITE?' for site <b>'+Copilot.esc(window.SITE)+'</b>':''} — nothing is publishing telemetry.
     Start the simulator against this backend:</div>
     <pre style="background:var(--surface3);border:1px solid var(--border);border-radius:6px;padding:9px 12px;margin-top:8px;font-size:12px;overflow-x:auto">python -m yantrasim --supabase      # or bring up the whole stack: python -m yantraops up</pre>
     <div style="font-size:10.5px;color:var(--muted);margin-top:8px">This card disappears as soon as robot rows arrive — the console never writes fleet data on its own.</div>
   </div>`;
 }
+/** v0.13: the Overview's "Top issues" box, from live rows when a backend is
+    connected (open incidents, unacked critical alerts, open findings) and
+    from the scripted narrative only in mock mode. */
+function topIssues(){
+  if(!liveNow()){
+    return [
+      {t:'AMR-07 fault is the top throughput drag',d:'Blocking Aisle B3 · 24 min · use Copilot for RCA',sev:'crit',go:"openIncident('INC-1042')"},
+      {t:'AMR-03 drivetrain trending to failure',d:'RUL ≈ 12 days · bearing kit recommended',sev:'serious',go:"go('maint')"},
+      {t:'Charge policy v12 active',d:'Staggered targets — contention resolved',sev:'info',go:"go('analytics')"},
+    ];
+  }
+  const e=Copilot.esc, out=[];
+  store.incidents.filter(i=>i.state==='Open').slice(0,2).forEach(i=>out.push({t:e(i.title),d:e(i.impact||'open incident · '+dispId(i.src||'')),sev:i.sev||'serious',go:`openIncident('${e(i.id)}')`}));
+  store.alerts.filter(a=>!a.ack&&(a.sev==='crit'||a.sev==='serious')).slice(0,2).forEach(a=>out.push({t:e(a.msg),d:'unacknowledged alert · '+e(dispId(a.src||'')),sev:a.sev,go:"go('liveops')"}));
+  (Array.isArray(store.findings)?store.findings:[]).slice(0,1).forEach(f=>out.push({t:e(dispId(f.robot_id||''))+' — '+e(f.finding||'maintenance finding'),d:e(f.action||'predictive maintenance'),sev:'warn',go:"go('maint')"}));
+  if(!out.length){
+    const low=[...robots].sort((a,b)=>a.battery-b.battery)[0];
+    if(low)out.push({t:'Lowest battery: '+e(rl(low))+' at '+low.battery.toFixed(0)+'%',d:low.status==='charging'?'charging now':'watch it — send to charge below 25%',sev:'info',go:`openRobot('${e(low.id)}')`});
+    out.push({t:'No open incidents',d:'fleet is operating within budget',sev:'info',go:"go('incidents')"});
+  }
+  return out.slice(0,3);
+}
 function rOverview(){
-  const s=fleetStats(), unack=store.alerts.filter(a=>!a.ack);
-  const topIssues=[
-    {t:'AMR-07 fault is the top throughput drag',d:'Blocking Aisle B3 · 24 min · use Copilot for RCA',sev:'crit',go:"openIncident('INC-1042')"},
-    {t:'AMR-03 drivetrain trending to failure',d:'RUL ≈ 12 days · bearing kit recommended',sev:'serious',go:"go('maint')"},
-    {t:'Charge policy v12 active',d:'Staggered targets — contention resolved',sev:'info',go:"go('analytics')"},
-  ];
+  const s=fleetStats(), unack=store.alerts.filter(a=>!a.ack), live=liveNow(), issues=topIssues();
+  const openInc=store.incidents.find(i=>i.state==='Open');
   $('#v-overview').innerHTML=`
-  <div class="vhead"><h1>Overview</h1><span class="sub">Shift 2 · 06:00–15:00 · ${clock()}</span>
+  <div class="vhead"><h1>Overview</h1><span class="sub">${live?Copilot.esc(siteLabel())+' · live':'Shift 2 · 06:00–15:00'} · ${clock()}</span>
     <div class="right"><button class="btn sm" id="btn-shift-report" onclick="ShiftReport.open()">⎙ Shift report</button>
       <button class="btn sm ghost" onclick="Copilot.ask('Draft the shift handover report')">✦ Draft shift report</button></div></div>
   ${emptyFleetCard()}
   <div class="grid g4">
     <div class="card stat"><div class="val" id="ov-health">${s.health}<small>/100</small></div><div class="lbl">Fleet health</div><div class="delta ${s.health>85?'up':'down'}">${s.health>85?'▲ Normal band':'▼ Degraded — 1 fault open'}</div></div>
-    <div class="card stat"><div class="val">${s.on}<small>/10 online</small></div><div class="lbl">Robots</div><div class="delta flat">${robots.filter(r=>r.status==='active').length} active · ${robots.filter(r=>r.status==='charging').length} charging · ${s.faults} fault</div></div>
+    <div class="card stat"><div class="val">${s.on}<small>/${robots.length} online</small></div><div class="lbl">Robots</div><div class="delta flat">${robots.filter(r=>r.status==='active').length} active · ${robots.filter(r=>r.status==='charging').length} charging · ${s.faults} fault</div></div>
     <div class="card stat"><div class="val" id="ov-thr">${store.throughput}<small> tasks/hr</small></div><div class="lbl">Throughput</div><div class="delta ${store.throughput>125?'up':'down'}">${store.throughput>125?'▲':'▼'} vs 131 target</div></div>
     <div class="card stat"><div class="val">${unack.length}<small> open</small></div><div class="lbl">Unacked alerts</div><div class="delta ${store.alarmHr<=12?'up':'down'}">${store.alarmHr}/hr · budget ≤12 <span class="pill" title="ISA-18.2">ISA-18.2</span></div></div>
   </div>
   <div class="grid g31" style="margin-top:14px">
     <div class="card"><h3>Throughput — last 60 min <span class="right">tasks/hr · 1-min buckets</span></h3>
       <div class="chart" id="ch-thr"></div>
-      <div style="margin-top:8px;font-size:12px;color:var(--ink2)">The 14:02–14:26 dip is <span class="evd" onclick="openIncident('INC-1042')">INC-1042</span> — AMR-07 localization fault. Recovery in progress.</div>
+      <div style="margin-top:8px;font-size:12px;color:var(--ink2)">${live
+        ?(openInc?`Open incident <span class="evd" onclick="openIncident('${Copilot.esc(openInc.id)}')">${Copilot.esc(dispId(openInc.id))}</span> — ${Copilot.esc(openInc.title)}.`:'Throughput is computed from the live feed (fleet_meta / completed tasks).')
+        :`The 14:02–14:26 dip is <span class="evd" onclick="openIncident('INC-1042')">INC-1042</span> — AMR-07 localization fault. Recovery in progress.`}</div>
     </div>
     <div class="card"><h3>Top issues</h3>
-      ${topIssues.map(i=>`<div style="padding:9px 0;border-bottom:1px solid var(--border)">
+      ${issues.map(i=>`<div style="padding:9px 0;border-bottom:1px solid var(--border)">
         <div style="display:flex;gap:8px;align-items:center">${sevBadge(i.sev)}<b style="font-size:12.5px">${i.t}</b></div>
         <div style="color:var(--muted);font-size:11.5px;margin:4px 0 6px">${i.d}</div>
         <button class="btn sm" onclick="${i.go}">Open</button></div>`).join('')}
@@ -652,11 +838,11 @@ function rOverview(){
     <div class="card"><h3>Fleet at a glance</h3>
       <table class="t"><thead><tr><th>Robot</th><th>Status</th><th>Battery</th><th>Task</th><th>Speed</th></tr></thead>
       <tbody>${robots.slice(0,6).map(r=>`<tr class="click" onclick="openRobot('${r.id}')">
-        <td><b>${r.id}</b> <span class="pill">${r.vendor}</span></td><td>${stBadge(r.status)}</td>
+        <td><b>${rl(r)}</b> <span class="pill">${Copilot.esc(r.vendor)}</span></td><td>${stBadge(r.status)}</td>
         <td><div style="display:flex;align-items:center;gap:8px"><div class="bar-track" style="width:52px"><div class="bar-fill" style="width:${r.battery}%;background:${batColor(r.battery)}"></div></div>${r.battery.toFixed(0)}%</div></td>
         <td style="color:var(--ink2)">${r.task?r.task.kind:'—'}</td><td>${r.speed.toFixed(1)} m/s</td></tr>`).join('')}
       </tbody></table>
-      <button class="btn ghost sm" style="margin-top:8px" onclick="go('liveops')">View all 10 robots →</button>
+      ${robots.length?`<button class="btn ghost sm" style="margin-top:8px" onclick="go('liveops')">View all ${robots.length} robots →</button>`:'<div class="empty">No robots reported yet</div>'}
     </div>
   </div>`;
   lineChart($('#ch-thr'),store.thrHist,{h:170,label:'throughput',unit:' t/hr'});
@@ -699,7 +885,7 @@ function ackAlert(id){const a=store.alerts.find(x=>x.id===id);if(a){a.ack=true;i
 let selRobot=null;
 function rLiveOps(){
   $('#v-liveops').innerHTML=`
-  <div class="vhead"><h1>Live Ops</h1><span class="sub">BLR-DC1 floor · real-time · click a robot</span>
+  <div class="vhead"><h1>Live Ops</h1><span class="sub">${Copilot.esc(siteLabel())} floor · real-time · click a robot</span>
     <div class="right">
       <span class="chip"><span class="dot" style="background:var(--s3)"></span>Active</span>
       <span class="chip"><span class="dot" style="background:var(--s4)"></span>Charging</span>
@@ -710,7 +896,7 @@ function rLiveOps(){
     <div class="mapwrap"><svg id="map" viewBox="0 0 1000 520" style="display:block;width:100%"></svg>
       <div class="map-legend"><span class="it">▭ racks</span><span class="it">— lanes</span><span class="it" style="color:#9ec5f4">⚑ tap robot for detail</span></div>
     </div>
-    <div class="card" style="max-height:560px;overflow-y:auto"><h3>Fleet · 10 robots</h3><div id="fl-list"></div></div>
+    <div class="card" style="max-height:560px;overflow-y:auto"><h3>Fleet · <span id="fl-count">${robots.length}</span> robots</h3><div id="fl-list"></div></div>
   </div>`;
   drawMapBase(); updateMap(); renderFleetList();
 }
@@ -737,15 +923,17 @@ function updateMap(){
     return `<g class="robot-dot" transform="translate(${r.pos[0].toFixed(1)},${r.pos[1].toFixed(1)})" onclick="openRobot('${r.id}')">
       ${pulse}${ring}
       <circle r="10" fill="${col}" stroke="var(--page)" stroke-width="2"/>
-      <text y="3.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0d0d0d">${r.id.slice(4)}</text>
-      <text y="-14" text-anchor="middle" font-size="9" fill="var(--ink2)">${r.id}</text>
+      <text y="3.5" text-anchor="middle" font-size="8.5" font-weight="700" fill="#0d0d0d">${Copilot.esc(rl(r).replace(/^[A-Za-z]+-?/,'').slice(-2)||rl(r).slice(-2))}</text>
+      <text y="-14" text-anchor="middle" font-size="9" fill="var(--ink2)">${Copilot.esc(rl(r))}</text>
     </g>`;}).join('');
+  const fc=$('#fl-count'); if(fc&&fc.textContent!==String(robots.length)){fc.textContent=robots.length;renderFleetList();}
 }
 function renderFleetList(){
   const el=$('#fl-list'); if(!el)return;
+  if(!robots.length){el.innerHTML='<div class="empty">No robots reported yet</div>';return;}
   el.innerHTML=robots.map(r=>`
    <div style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer" onclick="openRobot('${r.id}')">
-     <div><b style="font-size:12.5px">${r.id}</b><div style="font-size:10.5px;color:var(--muted)">${r.vendor}</div></div>
+     <div><b style="font-size:12.5px">${Copilot.esc(rl(r))}</b><div style="font-size:10.5px;color:var(--muted)">${Copilot.esc(r.vendor)}</div></div>
      <div style="margin-left:auto;text-align:right">${stBadge(r.status)}
        <div style="display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-top:3px;font-size:11px;color:var(--ink2)">
        <div class="bar-track" style="width:44px"><div class="bar-fill" style="width:${r.battery}%;background:${batColor(r.battery)}"></div></div>${r.battery.toFixed(0)}%</div>
@@ -756,15 +944,16 @@ function cycleSpeed(){speedMult=speedMult===1?2:speedMult===2?4:1;const b=$('#sp
 /* ---------------- Robot drawer ---------------- */
 function openRobot(id){
   selRobot=id; const r=robots.find(x=>x.id===id); const d=$('#drawer');
+  if(!r)return;
   d.innerHTML=`
-  <div class="dh"><h2>${r.id}</h2><span class="pill">${r.vendor}</span>${stBadge(r.status)}
+  <div class="dh"><h2 title="${Copilot.esc(r.id)}">${Copilot.esc(rl(r))}</h2><span class="pill">${Copilot.esc(r.vendor)}</span>${stBadge(r.status)}
     <button class="btn ghost sm" style="margin-left:auto" onclick="closeDrawer()">✕</button></div>
   <div class="db">
-    ${r.status==='fault'?`<div class="card" style="border-color:#5c2a2a;background:#221214"><b style="color:#e66767">✕ ${r.faultMsg}</b>
-      <div style="font-size:11.5px;color:var(--ink2);margin-top:4px">Protective stop engaged · blocking Aisle B3</div>
+    ${r.status==='fault'?`<div class="card" style="border-color:#5c2a2a;background:#221214"><b style="color:#e66767">✕ ${Copilot.esc(r.faultMsg||'Fault reported by the robot')}</b>
+      <div style="font-size:11.5px;color:var(--ink2);margin-top:4px">${liveNow()?'Protective stop engaged · the detector opens an incident after two consecutive polls':'Protective stop engaged · blocking Aisle B3'}</div>
       <div style="display:flex;gap:8px;margin-top:10px">
-        <button class="btn sm primary" onclick="fixRobot('${r.id}')">Re-localize from anchor</button>
-        <button class="btn sm" onclick="Copilot.ask('Why did ${r.id} fault?')">✦ Ask Copilot</button></div></div>`:''}
+        ${liveNow()?'':`<button class="btn sm primary" onclick="fixRobot('${r.id}')">Re-localize from anchor</button>`}
+        <button class="btn sm" onclick="Copilot.ask('Why did ${Copilot.esc(rl(r))} fault?')">✦ Ask Copilot</button></div></div>`:''}
     <div class="card">
       <div class="kv"><span>Battery</span><b style="color:${batTextColor(r.battery)}">${r.battery.toFixed(0)}%</b></div>
       <div class="bar-track"><div class="bar-fill" style="width:${r.battery}%;background:${batColor(r.battery)}"></div></div>
@@ -783,7 +972,7 @@ function openRobot(id){
       ${r.status==='paused'?`<button class="btn sm primary" onclick="cmdRobot('${r.id}','resume')">▶ Resume</button>`:`<button class="btn sm" onclick="cmdRobot('${r.id}','pause')">❚❚ Pause</button>`}
       <button class="btn sm" onclick="cmdRobot('${r.id}','charge')">⚡ Send to charge</button>
       <button class="btn sm danger" onclick="cmdRobot('${r.id}','stop')">■ E-stop</button></div>
-      <div style="font-size:10.5px;color:var(--muted);margin-top:8px">Commands are human-approved and audit-logged (mock)</div>`}</div>
+      <div style="font-size:10.5px;color:var(--muted);margin-top:8px">${liveNow()?'Commands queue for human approval (Overview → Pending approvals) and are audit-logged':'Commands are human-approved and audit-logged (mock)'}</div>`}</div>
     <div class="card"><h3>Recent events</h3>
       ${(r.log.length?r.log:[[clock2(simMin-8),'Task '+(r.task?r.task.id:'T-4408')+' started'],[clock2(simMin-22),'Passed node '+r.node.toUpperCase()],[clock2(simMin-40),'Battery check OK']]).slice(0,6).map(l=>`<div class="al"><span class="tt">${l[0]}</span><div class="bd"><span class="m">${l[1]}</span></div></div>`).join('')}
     </div>
@@ -806,15 +995,16 @@ function cmdRobot(id,cmd){
   // human-approval gate (commands table) instead of acting locally.
   if(typeof Sync!=='undefined'&&(Sync.mode==='leader'||Sync.mode==='follower')){
     Sync.queueCommand(id,cmd==='stop'?'estop':cmd);
-    toast(id+' — '+cmd+' queued for approval (see Overview → Pending approvals)');
+    toast(dispId(id)+' — '+cmd+' queued for approval (see Overview → Pending approvals)');
     return;
   }
-  const r=robots.find(x=>x.id===id);
-  if(cmd==='pause'){r.status='paused';r.log.unshift([clock(),'Paused by operator PN']);}
-  if(cmd==='resume'){r.status='active';assign(r);r.log.unshift([clock(),'Resumed by operator PN']);}
-  if(cmd==='charge'){r.status='active';r.path=route(r.node,'chg2');r.seg=0;r.prog=0;r.task=null;r.battery=Math.min(r.battery,29);r.log.unshift([clock(),'Sent to charge by operator PN']);}
-  if(cmd==='stop'){r.status='paused';r.speed=0;r.log.unshift([clock(),'E-STOP by operator PN']);}
-  toast(id+' — '+cmd+' command acknowledged');
+  const r=robots.find(x=>x.id===id); if(!r)return;
+  const who=(typeof YFAuth!=='undefined'&&YFAuth.authed())?YFAuth.state.email:'operator';
+  if(cmd==='pause'){r.status='paused';r.log.unshift([clock(),'Paused by '+who]);}
+  if(cmd==='resume'){r.status='active';assign(r);r.log.unshift([clock(),'Resumed by '+who]);}
+  if(cmd==='charge'){r.status='active';r.path=route(r.node,'chg2');r.seg=0;r.prog=0;r.task=null;r.battery=Math.min(r.battery,29);r.log.unshift([clock(),'Sent to charge by '+who]);}
+  if(cmd==='stop'){r.status='paused';r.speed=0;r.log.unshift([clock(),'E-STOP by '+who]);}
+  toast(rl(r)+' — '+cmd+' command acknowledged');
   openRobot(id); render();
 }
 function fixRobot(id){
@@ -834,10 +1024,10 @@ function rIncidents(){
   <div class="vhead"><h1>Incidents</h1><span class="sub">auto-detected from telemetry · with replay &amp; RCA</span></div>
   <div class="grid g13">
     <div class="card" style="align-self:start"><h3>Queue</h3>
-      ${store.incidents.map(i=>`<div style="padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer;${curInc===i.id?'background:var(--surface2);border-radius:6px;padding-left:8px':''}" onclick="openIncident('${i.id}')">
-        <div style="display:flex;gap:8px;align-items:center">${sevBadge(i.sev)}<span class="pill">${i.state}</span></div>
-        <b style="display:block;font-size:12.5px;margin-top:4px">${i.title}</b>
-        <span style="font-size:11px;color:var(--muted)">${i.id} · ${clock2(i.t)} · ${i.dur} min</span></div>`).join('')}
+      ${store.incidents.map(i=>`<div style="padding:10px 4px;border-bottom:1px solid var(--border);cursor:pointer;${curInc===i.id?'background:var(--surface2);border-radius:6px;padding-left:8px':''}" onclick="openIncident('${Copilot.esc(i.id)}')">
+        <div style="display:flex;gap:8px;align-items:center">${sevBadge(i.sev)||''}<span class="pill">${Copilot.esc(i.state)}</span></div>
+        <b style="display:block;font-size:12.5px;margin-top:4px">${Copilot.esc(i.title)}</b>
+        <span style="font-size:11px;color:var(--muted)">${Copilot.esc(dispId(i.id))} · ${Copilot.esc(clock2(i.t))} · ${i.dur!=null?i.dur+' min':'open'}</span></div>`).join('')||'<div class="empty">No incidents — the detector opens one when a robot stays in fault or e-stop for two polls</div>'}
     </div>
     <div id="inc-detail">${curInc?'':'<div class="card empty">Select an incident to open replay + root-cause analysis</div>'}</div>
   </div>`;
@@ -850,7 +1040,7 @@ function renderIncDetail(){
   <div class="card">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${sevBadge(i.sev)}<h2 style="font-size:15px">${i.title}</h2>
       <span class="pill">${i.id}</span><span class="pill">${i.state}</span>
-      ${i.state==='Open'?`<button class="btn sm primary" style="margin-left:auto" onclick="fixRobot('AMR-07')">Run guided recovery</button>`:''}</div>
+      ${i.state==='Open'&&!liveNow()?`<button class="btn sm primary" style="margin-left:auto" onclick="fixRobot('AMR-07')">Run guided recovery</button>`:''}</div>
     <div style="color:var(--ink2);font-size:12.5px;margin-top:8px"><b style="color:var(--serious)">Impact:</b> ${i.impact}</div>
     <div id="rp-wrap">${i.id==='INC-1042'?`
     <h3 style="margin-top:16px">Incident replay — position + telemetry, time-synced</h3>
@@ -1051,7 +1241,7 @@ function rMissions(){
   <div class="card"><table class="t"><thead><tr><th>Mission</th><th>Robots</th><th>State</th><th>Progress</th><th>ETA</th><th></th></tr></thead><tbody>
   ${store.missions.map(m=>`<tr>
     <td><b>${m.name}</b><div style="font-size:10.5px;color:var(--muted)">${m.id}</div></td>
-    <td>${m.robots.map(r=>`<span class="pill">${r}</span>`).join(' ')}</td>
+    <td>${m.robots.map(r=>`<span class="pill">${Copilot.esc(dispId(r))}</span>`).join(' ')}</td>
     <td><span class="st" style="color:${m.state==='Running'?'var(--s3)':m.state==='Done'?'var(--muted)':'var(--s4)'}"><i class="ic">${m.state==='Running'?'▶':m.state==='Done'?'✓':'◷'}</i>${m.state}</span></td>
     <td style="min-width:140px"><div style="display:flex;align-items:center;gap:8px"><div class="bar-track" style="flex:1"><div class="bar-fill" style="width:${m.prog}%;background:var(--s1)"></div></div>${m.prog}%</div></td>
     <td>${m.eta}</td>
@@ -1098,7 +1288,7 @@ function rMaint(){
     <div class="card"><h3>Robot health <span class="right">composite of vibration, temp, error rate, battery cycles</span></h3>
       <table class="t"><thead><tr><th>Robot</th><th>Health</th><th></th><th>Motor °C</th><th>Errors 7d</th><th>Battery cycles</th><th>Next service</th></tr></thead><tbody>
       ${[...robots].sort((a,b)=>a.health-b.health).map(r=>`<tr class="click" onclick="openRobot('${r.id}')">
-        <td><b>${r.id}</b> <span class="pill">${r.vendor}</span></td>
+        <td><b>${Copilot.esc(rl(r))}</b> <span class="pill">${Copilot.esc(r.vendor)}</span></td>
         <td style="width:120px"><div class="bar-track"><div class="bar-fill" style="width:${r.health}%;background:${r.health>85?'var(--s3)':r.health>75?'var(--warn)':'var(--crit)'}"></div></div></td>
         <td><b>${r.health.toFixed(0)}</b></td>
         <td style="color:${r.motorTemp>60?'var(--serious)':'var(--ink2)'}">${r.motorTemp.toFixed(0)}°</td>
@@ -1163,34 +1353,321 @@ function rAnalytics(){
       <tr><td>SLA compliance</td><td>98.2%</td><td>97.4%</td><td class="up">＋0.8pp</td></tr>
       <tr><td>Payback progress (12-robot lease)</td><td colspan="2">14.2 of 22 months</td><td class="flat">on track</td></tr>
     </tbody></table></div>`;
-  hbar($('#an-rob'),[...robots].sort((a,b)=>b.tasksDone-a.tasksDone).slice(0,8).map(r=>({n:r.id,v:r.tasksDone})),{});
+  hbar($('#an-rob'),[...robots].sort((a,b)=>b.tasksDone-a.tasksDone).slice(0,8).map(r=>({n:rl(r),v:r.tasksDone})),{});
   hbar($('#an-cause'),causeRows||[
     {n:'Localization',v:164,c:'var(--s2)'},{n:'Congestion',v:88,c:'var(--s1)'},{n:'Charging',v:71,c:'var(--s1)'},
     {n:'WMS sync',v:42,c:'var(--s1)'},{n:'Pick retry',v:35,c:'var(--s1)'}],{unit:'m'});
 }
 
 /* ---------------- Fleet & connectors ---------------- */
-function rFleet(){
-  $('#v-fleet').innerHTML=`
-  <div class="vhead"><h1>Fleet &amp; Connectors</h1><span class="sub">multi-vendor by design</span></div>
-  <div class="grid g2">
-    <div class="card"><h3>Connected fleets</h3>
-      ${[['Ati Sherpa ×4','VDA 5050 / MQTT','var(--s3)'],['MiR 250 ×3','VDA 5050 / REST bridge','var(--s3)'],['OTTO 600 ×3','OEM API adapter','var(--s3)'],['Zebra scanners','WMS webhook','var(--s3)']].map(([n,p,c])=>`
-      <div style="display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border)">
-        <span class="dot" style="width:8px;height:8px;border-radius:50%;background:${c}"></span><b>${n}</b>
-        <span class="pill" style="margin-left:auto">${p}</span><span class="st" style="color:var(--s3)"><i class="ic">●</i>Healthy</span></div>`).join('')}
-      <button class="btn sm" style="margin-top:10px" onclick="toast('Connector catalog opens (mock) — VDA 5050, ROS 2, OPC UA, MQTT, webhooks')">＋ Add connector</button></div>
-    <div class="card"><h3>Data pipeline (live)</h3>
-      ${[['Ingest rate','1,240 msg/s'],['Telemetry retention','30 d aggregated · 72 h raw'],['Video clips (event-triggered)','214 today · 4.1 GB'],['MCAP sessions','10 robots · continuous'],['Copilot queries today','23'],['Audit log','all commands + AI answers']].map(([k,v])=>`<div class="kv"><span>${k}</span><b>${v}</b></div>`).join('')}
-    </div>
-  </div>
-  <div class="card" style="margin-top:14px"><h3>Roles</h3>
-    <table class="t"><thead><tr><th>Role</th><th>Sees</th><th>Can</th></tr></thead><tbody>
-      <tr><td><b>Operator</b></td><td>Live Ops, alerts, missions</td><td>Ack, pause/resume, guided recovery</td></tr>
-      <tr><td><b>Engineer</b></td><td>+ telemetry, MCAP export, connectors</td><td>Deep-link to Foxglove, tune alerts</td></tr>
-      <tr><td><b>Manager</b></td><td>+ analytics, ROI, SLA reports</td><td>Export, schedule email digests</td></tr>
-    </tbody></table></div>`;
-}
+function rFleet(){ Workspace.render($('#v-fleet')); }
+
+/* ================= Workspace (v0.13: self-serve cloud, supabase/0019) =================
+   One view for "whose fleet is this, and how do I get data into it":
+   the workspace's identity, the simulated fleet switch, ingest keys,
+   integration snippets (VDA 5050 bridge / REST / Python / simulator /
+   MCP) and the team. Every mutation is an RPC that enforces the role
+   server-side; this module only decides what to draw. */
+const Workspace={
+  ws:null,          // my_workspace() payload, or null
+  supported:null,   // null = unknown · false = RPC absent (0019 not applied) · true
+  busy:false, curTab:'overview', _loading:null,
+  active(){return !!(this.ws&&this.ws.site_id&&isWorkspaceSite(this.ws.site_id));},
+  isAdmin(){return !!(this.ws&&this.ws.role==='admin');},
+  esc(s){return Copilot.esc(s);},
+  /** Called after sign-in (and at boot with a stored session). Resolves the
+      person's workspace, scopes the console to it, bootstraps one for
+      accounts that predate 0019. Never throws. */
+  async load(){
+    if(!(typeof YFAuth!=='undefined'&&YFAuth.authed())||MOCK_MODE||DEMO_TOKEN)return null;
+    if(this._loading)return this._loading;
+    this._loading=(async()=>{
+      try{
+        let ws=await Sync.q('rpc/my_workspace',{method:'POST',body:'{}'});
+        if(ws&&ws.ok&&!ws.site_id)ws=await Sync.q('rpc/workspace_bootstrap',{method:'POST',body:'{}'});
+        if(!ws||!ws.ok){this.supported=true;this.ws=null;return null;}
+        this.supported=true; this.ws=ws;
+        if(ws.site_id){window.SITE=ws.site_id; if(ws.role)YFAuth.state.role=ws.role; YFAuth.state.site=ws.site_id; YFAuth.save();}
+        this.applyHeader();
+        return ws;
+      }catch(e){
+        // PGRST202 = function not found → the deployment has not applied 0019 yet
+        if(e&&(e.status===404||e.status===400))this.supported=false;
+        this.ws=null; return null;
+      }finally{this._loading=null;}
+    })();
+    return this._loading;
+  },
+  async refresh(){ if(!this.active())return; try{const ws=await Sync.q('rpc/my_workspace',{method:'POST',body:'{}'});if(ws&&ws.ok){this.ws=ws;this.applyHeader();}}catch(e){} if(curView==='fleet')rFleet(); },
+  clear(){this.ws=null;this.applyHeader();},
+  applyHeader(){
+    const n=$('#site-name'),sub=$('#site-sub');if(!n)return;
+    if(this.ws&&this.ws.site_id){n.textContent=this.ws.name||this.ws.site_id;sub.innerHTML='· <code style="font-size:11px">'+this.esc(this.ws.site_id)+'</code> '+(this.ws.plan?'<span class="plan">'+this.esc(this.ws.plan)+'</span>':'');}
+    else if(DEMO_TOKEN||isDemoSite(window.SITE)){n.textContent='Sandbox fleet';sub.textContent='· '+(window.SITE||'DEMO')+' · expires on its own';}
+    else if(MOCK_MODE){n.textContent='Demo warehouse';sub.textContent='· mock data · nothing here is real';}
+    else {n.textContent=window.SITE||'BLR-DC1';sub.textContent=window.SITE&&window.SITE!=='BLR-DC1'?'':'· Bengaluru Fulfillment Center';}
+    if(typeof Sync!=='undefined')Sync.setChip();
+  },
+  tab(t){this.curTab=t;if(curView==='fleet')rFleet();},
+  // -- RPC helpers --------------------------------------------------------
+  async rpc(fn,args){
+    const out=await Sync.q('rpc/'+fn,{method:'POST',body:JSON.stringify(args||{})});
+    if(out&&out.ok===false){const e=new Error(out.error||out.reason||'refused');e.reason=out.reason;throw e;}
+    return out;
+  },
+  async run(fn,args,okMsg){
+    if(this.busy)return null; this.busy=true;
+    try{const out=await this.rpc(fn,args);if(okMsg)toast(okMsg);await this.refresh();return out;}
+    catch(e){toast('⚠ '+(e&&e.status===403?'Requires the admin role':(e&&e.message)||'Failed'));return null;}
+    finally{this.busy=false;}
+  },
+  async rename(){const v=prompt('Workspace name',this.ws&&this.ws.name||'');if(v&&v.trim())await this.run('workspace_rename',{p_name:v.trim()},'Workspace renamed');},
+  async createKey(){
+    const label=(($('#key-label')||{}).value||'default').trim()||'default';
+    const out=await this.run('workspace_create_ingest_key',{p_label:label});
+    if(!out)return;
+    const key=out.key||'';
+    Modal.show(`<h2>🔑 New ingest key — copy it now</h2>
+      <p>This is the only time the full key is shown. Yantrika stores a hash, so it cannot be recovered — revoke and create a new one if it is lost.</p>
+      <div class="codeblk" style="white-space:pre-wrap;word-break:break-all">${this.esc(key)}</div>
+      <p style="font-size:11.5px">Send it as the <code>x-yf-ingest-key</code> header (the bridge and simulator do this for you with <code>--ingest-key</code>). It can only read and write site <b>${this.esc(this.ws.site_id)}</b>.</p>
+      <div class="row"><button class="btn primary" onclick="copyText(${JSON.stringify(key)},'Key copied')">Copy key</button><button class="btn" onclick="Modal.close()">Done</button></div>`,{sticky:true});
+  },
+  async revokeKey(id,prefix){if(!confirm('Revoke key '+prefix+'…? Anything using it stops writing immediately.'))return;await this.run('workspace_revoke_ingest_key',{p_id:id},'Key revoked');},
+  async invite(){
+    const em=(($('#inv-email')||{}).value||'').trim().toLowerCase(), role=($('#inv-role')||{}).value||'operator';
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){toast('Enter a valid email');return;}
+    const out=await this.run('workspace_invite',{p_email:em,p_role:role});
+    if(out)toast(out.status==='added'?em+' added as '+role:em+' invited as '+role+' — they get access the moment they create an account');
+  },
+  async setRole(uid,role){await this.run('workspace_set_member_role',{p_user_id:uid,p_role:role},'Role updated');},
+  async removeMember(uid,email){if(!confirm('Remove '+email+' from this workspace?'))return;await this.run('workspace_remove_member',{p_user_id:uid},'Member removed');},
+  async cancelInvite(id){await this.run('workspace_cancel_invite',{p_id:id},'Invite cancelled');},
+  async purge(){
+    if(!confirm('Delete every robot, alert, incident, command, mission, telemetry sample and finding in '+this.ws.site_id+'? Keys and members are kept. This cannot be undone.'))return;
+    const out=await this.run('workspace_purge_fleet',{},'Workspace fleet data deleted');
+    if(out){robots.length=0;store.alerts=[];store.incidents=[];store.missions=[];store.findings=null;store.audit=null;Sync.robotsEmptySince=Date.now()-Sync.EMPTY_AFTER_MS;render(true);}
+  },
+  // -- the door (yantraops sandbox-serve, /api/workspace/…) ---------------
+  async door(path,method,body){
+    const r=await fetch(DOOR_BASE+path,{method:method||'GET',headers:{'Authorization':'Bearer '+YFAuth.state.jwt,'Content-Type':'application/json','Accept':'application/json'},body:method==='POST'?JSON.stringify(body||{}):undefined,credentials:'omit'});
+    let d=null;try{d=await r.json();}catch(e){}
+    return {status:r.status,body:d||{}};
+  },
+  async simStart(){
+    if(this.busy)return; this.busy=true;
+    const b=$('#gs-sim')||$('#ws-sim-start');if(b){b.disabled=true;b.textContent='Starting your fleet…';}
+    try{
+      const {status,body}=await this.door('/api/workspace/sim/start','POST',{});
+      if(status===201||status===200){toast('▶ Simulated fleet started — robots appear within a few seconds');Sync.robotsEmptySince=null;}
+      else if(status===503)toast('⚠ '+(body.error||'Simulated fleets are not enabled on this deployment (needs migration 0019 + the workspace door)'));
+      else if(status===401)toast('⚠ Session expired — sign in again');
+      else if(status===403)toast('⚠ Only a workspace admin can start the simulated fleet');
+      else if(status===429)toast('⚠ '+(body.error||'Too many fleets right now — try again in a minute'));
+      else toast('⚠ '+(body.error||('Could not start the simulated fleet (HTTP '+status+')')));
+    }catch(e){toast('⚠ Could not reach the workspace service at '+DOOR_BASE+' — is `yantraops sandbox-serve` running?');}
+    finally{this.busy=false;await this.refresh();render(true);}
+  },
+  async simStop(){
+    if(this.busy)return; this.busy=true;
+    try{const {status,body}=await this.door('/api/workspace/sim/stop','POST',{});
+      toast(status<300?'■ Simulated fleet stopped':'⚠ '+(body.error||'Could not stop (HTTP '+status+')'));}
+    catch(e){toast('⚠ Could not reach the workspace service');}
+    finally{this.busy=false;await this.refresh();}
+  },
+  // -- rendering ----------------------------------------------------------
+  snippets(){
+    const e=this.esc, site=this.ws&&this.ws.site_id||window.SITE||'WS-xxxxxxxx', key='yk_<your-ingest-key>';
+    const url=e(SUPA_URL), ak=e(SUPA_KEY);
+    return {
+      bridge:`<span class="c"># 1) install the connector (Python 3.10+)</span>
+pip install "git+https://github.com/punith-naga/yantrafleet#subdirectory=core" \\
+            "git+https://github.com/punith-naga/yantrafleet#subdirectory=connector"
+
+<span class="c"># 2) bridge your VDA 5050 v2.1 broker into this workspace</span>
+<span class="k">export</span> SUPABASE_URL=${url}
+<span class="k">export</span> SUPABASE_KEY=${ak}
+<span class="k">export</span> YANTRA_INGEST_KEY=${key}
+<span class="k">export</span> YANTRA_SITE_ID=${e(site)}
+python -m yantrabridge --mqtt-host broker.yourplant.local --mqtt-port 1883 \\
+       --mqtt-topic "uagv/v2/+/+/state" --site ${e(site)} --commands
+
+<span class="c"># robots appear on the Live Ops map as they publish state; approved
+# commands go back out as VDA 5050 instantActions (--commands)</span>`,
+      rest:`<span class="c"># upsert robot state over plain HTTPS — any language, any device</span>
+curl -X POST "${url}/rest/v1/robots?on_conflict=id" \\
+  -H "apikey: ${ak}" \\
+  -H "Authorization: Bearer ${ak}" \\
+  -H "x-yf-ingest-key: ${key}" \\
+  -H "Content-Type: application/json" \\
+  -H "Prefer: resolution=merge-duplicates,return=minimal" \\
+  -d '[{"id":"${e(site)}-AMR-01","vendor":"Acme AMR","status":"active",
+        "battery":82,"pos":[12.5,4.0],"speed":1.1,"health":97,
+        "motor_temp":41,"tasks_done":12,"site_id":"${e(site)}"}]'
+
+<span class="c"># read it back the same way (GET …/rest/v1/robots?site_id=eq.${e(site)})
+# ids are namespaced "<site>-<robot>" because robots.id is global</span>`,
+      python:`<span class="k">import</span> httpx, datetime
+
+BASE = "${url}/rest/v1"
+H = {"apikey": "${ak}",
+     "Authorization": "Bearer ${ak}",
+     "x-yf-ingest-key": "${key}",
+     "Prefer": "resolution=merge-duplicates,return=minimal"}
+SITE = "${e(site)}"
+
+<span class="k">def</span> publish(robot_id, **state):
+    row = {"id": f"{SITE}-{robot_id}", "site_id": SITE,
+           "updated_at": datetime.datetime.utcnow().isoformat() + "Z", **state}
+    httpx.post(f"{BASE}/robots", params={"on_conflict": "id"},
+               json=[row], headers=H, timeout=10).raise_for_status()
+
+publish("AMR-01", vendor="Acme AMR", status="active", battery=82,
+        pos=[12.5, 4.0], speed=1.1, health=97, motor_temp=41, tasks_done=12)`,
+      sim:`<span class="c"># drive this workspace from your own machine with the bundled simulator</span>
+git clone https://github.com/punith-naga/yantrafleet.git && cd yantrafleet && ./install.sh
+<span class="k">export</span> SUPABASE_URL=${url} SUPABASE_KEY=${ak}
+<span class="k">export</span> YANTRA_INGEST_KEY=${key}
+.venv/bin/python -m yantrasim --supabase --site ${e(site)} --fleet-size 10`,
+      mcp:`<span class="c"># Claude Desktop / any MCP client: the same fleet tools, read as you</span>
+{
+  "mcpServers": {
+    "yantrika": {
+      "command": "python", "args": ["-m", "sarathi.mcp_server"],
+      "env": {"SUPABASE_URL": "${url}",
+              "SUPABASE_KEY": "${ak}",
+              "YANTRA_SITE_ID": "${e(site)}"}
+    }
+  }
+}`
+    };
+  },
+  render(el){
+    const e=this.esc, ws=this.ws, authed=typeof YFAuth!=='undefined'&&YFAuth.authed();
+    const tabs=[['overview','Overview'],['connect','Connect robots'],['keys','Ingest keys'],['team','Team']];
+    const tabBar=`<div class="tabs">${tabs.map(([k,l])=>`<button class="${this.curTab===k?'on':''}" onclick="Workspace.tab('${k}')">${l}</button>`).join('')}</div>`;
+    const code=(k,s)=>`<div class="codeblk"><button class="btn sm cp" onclick="copyText(this.parentNode.innerText.replace(/^Copy\\n?/,''),'Copied')">Copy</button>${s}</div>`;
+    const sn=this.snippets();
+    const connect=`
+      <div class="card"><h3>Connect real robots <span class="right">VDA 5050 v2.1 over MQTT · REST · Python · MCP</span></h3>
+        <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">Every writer authenticates with an <b>ingest key</b> sent as <code>x-yf-ingest-key</code>. The key can only read and write <b>this</b> site — row-level security in Postgres pins every policy to it. Create one under <a href="#" onclick="Workspace.tab('keys');return false" style="color:#9ec5f4">Ingest keys</a>, then pick a path:</div>
+        <div class="tabs" style="margin-top:10px">${[['bridge','VDA 5050 bridge'],['rest','REST (curl)'],['python','Python'],['sim','Simulator'],['mcp','MCP / Claude']].map(([k,l])=>`<button class="${(this.snip||'bridge')===k?'on':''}" onclick="Workspace.snip='${k}';rFleet()">${l}</button>`).join('')}</div>
+        ${code(this.snip||'bridge',sn[this.snip||'bridge'])}
+        <div style="font-size:11px;color:var(--muted)">The anon key above is public by design (it is in this page's URL); the ingest key is the secret. Rotate it from the Ingest keys tab at any time.</div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3>What arrives where</h3>
+        <table class="t"><thead><tr><th>You publish</th><th>Yantrika does</th><th>You see</th></tr></thead><tbody>
+          <tr><td>VDA 5050 <code>state</code> (or a <code>robots</code> row)</td><td>translates, normalises status, dedups alerts, keeps telemetry history</td><td>Live Ops map, robot drawer, Analytics</td></tr>
+          <tr><td>a fault / e-stop that persists</td><td>opens an incident with an id, impact and duration; resolves it on recovery</td><td>Incidents with recorded-telemetry replay</td></tr>
+          <tr><td>nothing — an operator clicks Pause / Charge / E-stop</td><td>queues a <code>pending</code> command for a manager to approve; the bridge sends the VDA 5050 instantAction</td><td>Pending approvals, Audit trail</td></tr>
+          <tr><td>telemetry over hours</td><td>trends motor temperature, battery drain and speed decline into findings with RUL and confidence</td><td>Maintenance</td></tr>
+          <tr><td>a question</td><td>Sarathi answers from these rows only, with citations</td><td>⌘J Copilot</td></tr>
+        </tbody></table></div>`;
+    // -- not signed in (demo / sandbox / anon): pitch + the generic snippets --
+    if(!authed||!ws){
+      el.innerHTML=`<div class="vhead"><h1>Workspace &amp; Connect</h1><span class="sub">${MOCK_MODE?'demo · mock data':DEMO_TOKEN?'sandbox fleet':'not signed in'}</span></div>
+        <div class="card" style="border-color:#2a4a75;background:#12253f22"><h3>Your own fleet, in about a minute</h3>
+          <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">Create a free account and you get a private <b>workspace</b>: your own site id, admin role, ingest keys to connect real robots over VDA 5050 or REST, a one-click simulated fleet so the console is never empty, and role-scoped seats for your team. ${this.supported===false?'<br><b style="color:var(--warn)">This deployment has not enabled self-serve workspaces yet</b> (apply supabase/0019_workspaces.sql).':''}</div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn primary" onclick="YFAuth.setMode('up');YFAuth.show()">Create free account</button><button class="btn" onclick="YFAuth.setMode('in');YFAuth.show()">Sign in</button>${MOCK_MODE&&_served?'<a class="btn" href="/#demo-live" style="text-decoration:none">Try a live sandbox</a>':''}</div></div>
+        <div style="margin-top:14px">${connect}</div>`;
+      return;
+    }
+    if(!this.active()){
+      el.innerHTML=`<div class="vhead"><h1>Workspace &amp; Connect</h1><span class="sub">${e(window.SITE||'site')} · ${e(YFAuth.state.role||'no role')}</span></div>
+        <div class="card"><h3>${this.supported===false?'Self-serve workspaces are not enabled here':'Legacy site'}</h3>
+          <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">${this.supported===false
+            ?'This deployment has not applied <code>supabase/0019_workspaces.sql</code>, so accounts do not get a workspace of their own. An admin enables it with <code>python -m yantraops migrate --include-opt-in</code> and the workspace door (docs/WORKSPACES.md).'
+            :'You are signed in to an operator-managed site rather than a self-serve workspace. Roles here are granted by its admin (docs/SECURITY.md).'}</div></div>
+        <div style="margin-top:14px">${connect}</div>`;
+      return;
+    }
+    const sim=ws.sim||{}, keys=(ws.keys||[]).filter(k=>k.kind!=='sim'), simKey=(ws.keys||[]).find(k=>k.kind==='sim');
+    const when=t=>t?e(String(t).replace('T',' ').slice(0,16)):'—';
+    const admin=this.isAdmin();
+    let body='';
+    if(this.curTab==='overview')body=`
+      <div class="grid g2">
+        <div class="card"><h3>Simulated fleet <span class="right">server-side · 4 h · restart any time</span></h3>
+          <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">${sim.running?`<b style="color:var(--s3)">● Running</b> — ${e(sim.robots||8)} robots until ${when(sim.expires_at)} (UTC). The fleet publishes VDA-shaped state every 2 s: faults, charging, missions and incidents included.`:'Not running. Start one to see the whole console working against your own site in seconds — then replace it with real robots whenever you are ready.'}</div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            ${admin?(sim.running?`<button class="btn sm danger" onclick="Workspace.simStop()">■ Stop simulated fleet</button><button class="btn sm" id="ws-sim-start" onclick="Workspace.simStart()">↻ Restart (new 4 h)</button>`:`<button class="btn sm primary" id="ws-sim-start" onclick="Workspace.simStart()">▶ Start simulated fleet</button>`):'<span class="pill">admin only</span>'}
+            <button class="btn sm ghost" onclick="go('liveops')">Open Live Ops →</button></div></div>
+        <div class="card"><h3>This workspace</h3>
+          <div class="kv"><span>Name</span><b>${e(ws.name||'—')} ${admin?`<button class="btn sm ghost" onclick="Workspace.rename()">rename</button>`:''}</b></div>
+          <div class="kv"><span>Site id</span><b><code>${e(ws.site_id)}</code> <button class="btn sm ghost" onclick="copyText('${e(ws.site_id)}','Site id copied')">copy</button></b></div>
+          <div class="kv"><span>Plan</span><b><span class="plan">${e(ws.plan||'free')}</span></b></div>
+          <div class="kv"><span>Your role</span><b>${e(ws.role||'—')}${ws.owner?' · owner':''}</b></div>
+          <div class="kv"><span>Created</span><b>${when(ws.created_at)}</b></div>
+          <div class="kv"><span>Robots reporting</span><b>${robots.length}</b></div>
+          <div class="kv"><span>Ingest keys</span><b>${keys.length} active</b></div>
+          <div class="kv"><span>Members</span><b>${(ws.members||[]).length||'—'}${(ws.invites||[]).length?' · '+(ws.invites||[]).length+' pending':''}</b></div></div>
+      </div>
+      <div class="card" style="margin-top:14px"><h3>Roles in this workspace</h3>
+        <table class="t"><thead><tr><th>Role</th><th>Can</th></tr></thead><tbody>
+          <tr><td><b>Operator</b></td><td>view everything, acknowledge alerts, request robot commands (queued for approval)</td></tr>
+          <tr><td><b>Engineer</b></td><td>operator + maintenance findings feedback, telemetry exports</td></tr>
+          <tr><td><b>Manager</b></td><td>engineer + approve / reject commands (the human-in-the-loop gate)</td></tr>
+          <tr><td><b>Admin</b></td><td>manager + ingest keys, members, simulated fleet, rename, purge</td></tr>
+        </tbody></table>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px">Enforced by Postgres row-level security and SECURITY DEFINER functions, not by this page — docs/SECURITY.md.</div></div>
+      ${admin?`<div class="card" style="margin-top:14px;border-color:#5c2a2a"><h3>Danger zone</h3>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="font-size:12.5px;color:var(--ink2);flex:1">Delete every fleet row in this workspace (robots, alerts, incidents, commands, missions, telemetry, findings). Keys and members stay.</span>
+        <button class="btn sm danger" onclick="Workspace.purge()">Delete fleet data</button></div></div>`:''}`;
+    else if(this.curTab==='connect')body=connect;
+    else if(this.curTab==='keys')body=`
+      <div class="card"><h3>Ingest keys <span class="right">bearer secrets · hashed at rest · pinned to ${e(ws.site_id)}</span></h3>
+        ${keys.length?keys.map(k=>`<div class="keyrow"><code>${e(k.prefix)}…</code><b>${e(k.label||'default')}</b><span class="pill">${e(k.kind||'integration')}</span><span style="color:var(--muted);font-size:11.5px;margin-left:auto">created ${when(k.created_at)}${k.expires_at?' · expires '+when(k.expires_at):''}</span>${admin?`<button class="btn sm danger" onclick="Workspace.revokeKey('${e(k.id)}','${e(k.prefix)}')">Revoke</button>`:''}</div>`).join(''):'<div class="empty">No ingest keys yet — create one to connect robots or a simulator from your own machine.</div>'}
+        ${simKey?`<div class="keyrow" style="opacity:.7"><code>${e(simKey.prefix)}…</code><b>simulated fleet</b><span class="pill">sim</span><span style="color:var(--muted);font-size:11.5px;margin-left:auto">managed by the platform · expires ${when(simKey.expires_at)}</span></div>`:''}
+        ${admin?`<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap"><input class="inp" id="key-label" placeholder="label (e.g. plant-A bridge)" style="width:220px"><button class="btn sm primary" onclick="Workspace.createKey()">＋ Create ingest key</button><span style="font-size:11px;color:var(--muted)">up to 10 active keys</span></div>`:'<div style="font-size:11px;color:var(--muted);margin-top:8px">Only an admin can create or revoke keys.</div>'}
+      </div>
+      <div class="card" style="margin-top:14px"><h3>How a key is checked</h3>
+        <div style="font-size:12.5px;color:var(--ink2);line-height:1.6">The request carries <code>x-yf-ingest-key</code>. Postgres hashes it, looks the hash up, and resolves it to <b>one</b> site id — or NULL. Every read and write policy for machine writers is <code>site_id = yf_ingest_site()</code>, so a missing, revoked, expired or guessed key sees nothing and writes nothing. There is no key that can touch another workspace, <code>fleet_meta</code>, settings or roles.</div></div>`;
+    else if(this.curTab==='team')body=`
+      <div class="card"><h3>Members <span class="right">${(ws.members||[]).length} in ${e(ws.name||ws.site_id)}</span></h3>
+        ${admin?((ws.members||[]).length?`<table class="t"><thead><tr><th>Email</th><th>Role</th><th>Since</th><th></th></tr></thead><tbody>
+          ${(ws.members||[]).map(m=>`<tr><td><b>${e(m.email||m.user_id)}</b>${m.user_id===ws.owner_id?' <span class="pill">owner</span>':''}</td>
+            <td>${m.user_id===ws.owner_id?e(m.role):`<select class="inp" onchange="Workspace.setRole('${e(m.user_id)}',this.value)">${['operator','engineer','manager','admin'].map(r=>`<option ${m.role===r?'selected':''}>${r}</option>`).join('')}</select>`}</td>
+            <td style="color:var(--muted)">${when(m.granted_at)}</td>
+            <td>${m.user_id===ws.owner_id?'':`<button class="btn sm ghost" onclick="Workspace.removeMember('${e(m.user_id)}','${e(m.email||'')}')">Remove</button>`}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">Just you so far.</div>')
+        :'<div style="font-size:12.5px;color:var(--ink2)">You are signed in as <b>'+e(YFAuth.state.email)+'</b> with the <b>'+e(ws.role||'—')+'</b> role. Ask a workspace admin to change roles or invite people.</div>'}
+        ${admin?`<div style="display:flex;gap:8px;margin-top:12px;align-items:center;flex-wrap:wrap"><input class="inp" id="inv-email" type="email" placeholder="colleague@company.com" style="width:240px"><select class="inp" id="inv-role">${['operator','engineer','manager','admin'].map(r=>`<option value="${r}">${r}</option>`).join('')}</select><button class="btn sm primary" onclick="Workspace.invite()">Invite</button><span style="font-size:11px;color:var(--muted)">existing accounts get access immediately; new ones the moment they sign up</span></div>`:''}
+      </div>
+      ${admin&&(ws.invites||[]).length?`<div class="card" style="margin-top:14px"><h3>Pending invites</h3>${ws.invites.map(i=>`<div class="keyrow"><b>${e(i.email)}</b><span class="pill">${e(i.role)}</span><span style="color:var(--muted);font-size:11.5px;margin-left:auto">invited ${when(i.created_at)}</span><button class="btn sm ghost" onclick="Workspace.cancelInvite('${e(i.id)}')">Cancel</button></div>`).join('')}</div>`:''}`;
+    el.innerHTML=`<div class="vhead"><h1>${e(ws.name||'Workspace')}</h1><span class="sub"><code>${e(ws.site_id)}</code> · ${e(ws.role||'—')}${ws.owner?' · owner':''}</span>
+      <div class="right"><button class="btn sm ghost" onclick="Workspace.refresh()">↻ Refresh</button></div></div>${tabBar}${body}`;
+  }
+};
+
+/* ================= Sandbox (v0.13: 0009 countdown + expiry) ================= */
+const Sandbox={
+  expiresAt:null, _timer:null, _poll:null,
+  start(){
+    if(!DEMO_TOKEN)return;
+    $('#chip-sandbox').style.display='';
+    this.info(); this._poll=setInterval(()=>this.info(),30000);
+    this._timer=setInterval(()=>this.tick(),1000);
+    Workspace.applyHeader();
+  },
+  async info(){
+    try{const d=await Sync.q('rpc/demo_session_info',{method:'POST',body:JSON.stringify({p_token:DEMO_TOKEN})});
+      if(d&&d.live===false){this.ended();return;}
+      if(d&&d.expires_at)this.expiresAt=new Date(d.expires_at).getTime();
+    }catch(e){}
+  },
+  leftMs(){return this.expiresAt?Math.max(0,this.expiresAt-Date.now()):null;},
+  leftText(){const ms=this.leftMs();if(ms==null)return 'a while';const m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;return m>0?m+' min':s+' s';},
+  tick(){const el=$('#sandbox-left');if(!el)return;const ms=this.leftMs();
+    if(ms==null){el.textContent='…';return;}
+    const m=Math.floor(ms/60000),s=Math.floor(ms/1000)%60;el.textContent=pad(m)+':'+pad(s);
+    if(ms<=0)this.ended();},
+  ended(){
+    if(this._ended)return;this._ended=true;clearInterval(this._timer);clearInterval(this._poll);
+    const el=$('#sandbox-left');if(el)el.textContent='ended';
+    Modal.show(`<h2>⏳ Your sandbox fleet has ended</h2>
+      <p>The throwaway site and everything in it have been deleted — that was the deal. Keep going with a workspace of your own: same console, your data, your robots, free.</p>
+      <div class="row"><button class="btn primary" onclick="Modal.close();YFAuth.setMode('up');YFAuth.show()">Create free account</button>${_served?'<a class="btn" href="/" style="text-decoration:none">Start another sandbox</a>':''}<button class="btn ghost" onclick="location.hash='demo';location.reload()">Explore the mock demo</button></div>`,{sticky:true});
+  }
+};
 
 /* ---------------- Audit (v0.9: command history + acknowledged alerts) ---------------- */
 let auditFilter='all';
@@ -1355,7 +1832,7 @@ const Copilot={
       <div><div class="t">Fleet Copilot</div><div class="s">grounded in live fleet data · every answer cites evidence</div></div>
       <button class="btn ghost sm" style="margin-left:auto" onclick="Copilot.toggle()">✕</button></div>
     <div class="cp-body" id="cp-body">
-      ${this.msgs.length?'':`<div class="msg ai">Hi Punith — I'm watching all 10 robots. Ask me anything about the fleet, or try:</div>
+      ${this.msgs.length?'':`<div class="msg ai">Hi${(typeof YFAuth!=='undefined'&&YFAuth.authed())?' '+this.esc(String(YFAuth.state.email).split('@')[0]):''} — I'm watching ${robots.length?'all '+robots.length+' robots':'this fleet'}${window.SITE?' at '+this.esc(siteLabel()):''}. Ask me anything about the fleet, or try:</div>
       <div class="sugg">
         <button onclick="Copilot.ask('Why did throughput drop after 14:00?')">Why did throughput drop after 14:00?</button>
         <button onclick="Copilot.ask('Which robot needs service next?')">Which robot needs service next?</button>
@@ -1374,12 +1851,22 @@ const Copilot={
   SARATHI_URL:'http://localhost:8001/ask',
   SARATHI_HEALTH_URL:'http://localhost:8001/health',
   SARATHI_TIMEOUT_MS:4000,
+  /* v0.13: served from a real host (yantrika.ai) nginx proxies /ask and
+     /health on the same origin — a hardcoded localhost:8001 would be mixed
+     content there and silently fall back to the local engine. ?ask= wins,
+     then same-origin when served, then the localhost default. */
+  resolveUrls(){const o=_cfg.get('ask');
+    if(o){this.SARATHI_URL=o;this.SARATHI_HEALTH_URL=o.replace(/\/ask\/?$/,'')+'/health';}
+    else if(_served){this.SARATHI_URL=location.origin+'/ask';this.SARATHI_HEALTH_URL=location.origin+'/health';}},
   /* ?token=<bearer> in the console URL → Authorization header on /ask + /health.
      No token → the header is omitted entirely (requests unchanged from before). */
   SARATHI_TOKEN:new URLSearchParams(location.search).get('token')||null,
   hdr(extra){
     const h=Object.assign({},extra||{});
     if(this.SARATHI_TOKEN)h['Authorization']='Bearer '+this.SARATHI_TOKEN;
+    // v0.13: the copilot reads AS THE ASKER — RLS decides what it may see.
+    if(typeof YFAuth!=='undefined'&&YFAuth.state.jwt)h['X-YF-User-Token']=YFAuth.state.jwt;
+    if(DEMO_TOKEN)h['X-YF-Demo-Token']=DEMO_TOKEN;
     return h;
   },
   /** Best-effort reachability probe on panel open — updates the subtitle only,
@@ -1399,8 +1886,9 @@ const Copilot={
   async askRemote(q){
     const c=new AbortController(); const t=setTimeout(()=>c.abort(),this.SARATHI_TIMEOUT_MS);
     try{
+      const body={question:q}; if(window.SITE)body.site=window.SITE;   // v0.13: tenant scope
       const r=await fetch(this.SARATHI_URL,{method:'POST',signal:c.signal,
-        headers:this.hdr({'Content-Type':'application/json'}),body:JSON.stringify({question:q})});
+        headers:this.hdr({'Content-Type':'application/json'}),body:JSON.stringify(body)});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const d=await r.json();
       if(!d||typeof d.answer!=='string')throw new Error('bad payload: missing answer');
@@ -1433,7 +1921,8 @@ const Copilot={
     this.msgs.push({html:`<div class="msg user">${q}</div>`});
     this.msgs.push({html:`<div class="msg ai"><span class="typing"><i></i><i></i><i></i></span></div>`});
     this.render();
-    try{ // 1) live agent first
+    try{ // 1) live agent first (never in mock-demo mode: there is no backend to ground on)
+      if(MOCK_MODE)throw new Error('mock mode');
       const d=await this.askRemote(q);
       this.msgs.pop();
       this.msgs.push({html:`<div class="msg ai">${this.renderRemote(d)}</div>`});
@@ -1442,12 +1931,53 @@ const Copilot={
       setTimeout(()=>{this.msgs.pop();this.msgs.push({html:`<div class="msg ai">${this.answer(q)}</div>`});this.render();},300);
     }
   },
+  /** v0.13: the offline engine against a LIVE fleet — answers built only from
+      the rows on screen (never the scripted INC-1042 story), each with
+      evidence chips that open the view the number came from. */
+  answerLive(q){
+    const s=fleetStats(), e=this.esc;
+    const ev=(...items)=>`<div class="ev">${items.join('')}</div>`;
+    const chip=(l,fn)=>`<span class="evd" onclick="${fn}">${l}</span>`;
+    const pill=`<div style="margin-top:7px">${this.tierPill('offline')}</div>`;
+    const open=store.incidents.filter(i=>i.state==='Open'), unack=store.alerts.filter(a=>!a.ack);
+    const faulted=robots.filter(r=>r.status==='fault'||r.status==='estop');
+    const low=[...robots].sort((a,b)=>a.battery-b.battery)[0];
+    if(!robots.length)return `No robots have reported to <b>${e(siteLabel())}</b> yet. Start a simulated fleet or connect your robots from the Workspace view. ${ev(chip('Workspace',"go('fleet')"))}${pill}`;
+    if(/service|maint|wear|rul|repair/.test(q)){
+      const f=Array.isArray(store.findings)&&store.findings[0];
+      const worst=[...robots].sort((a,b)=>a.health-b.health)[0];
+      return f?`<b>${e(dispId(f.robot_id||''))}</b> — ${e(f.component||'component')}: ${e(f.finding||'finding')}${f.rul_days!=null?` (RUL ≈ ${e(f.rul_days)} days)`:''}${f.confidence!=null?`, confidence ${Math.round(+f.confidence*100)}%`:''}. ${f.action?'Recommended: '+e(f.action):''}${ev(chip('Maintenance',"go('maint')"),chip(e(dispId(f.robot_id||'')),`openRobot('${e(f.robot_id||'')}')`))}${pill}`
+        :`No open maintenance findings for this site. Lowest health score is <b>${e(rl(worst))}</b> at ${worst.health.toFixed(0)}/100 (motor ${worst.motorTemp.toFixed(0)}°C).${ev(chip('Maintenance',"go('maint')"),chip(e(rl(worst)),`openRobot('${e(worst.id)}')`))}${pill}`;
+    }
+    if(/handover|report|shift/.test(q)){
+      return `<b>Handover — ${e(siteLabel())} · ${clock()}</b><ul>
+      <li><b>Fleet:</b> ${s.on}/${robots.length} available · ${robots.filter(r=>r.status==='active').length} active · ${robots.filter(r=>r.status==='charging').length} charging · avg battery ${s.avgB.toFixed(0)}%</li>
+      <li><b>Incidents:</b> ${open.length} open${open.length?' — '+open.slice(0,2).map(i=>e(dispId(i.id))+' '+e(i.title)).join('; '):''}</li>
+      <li><b>Alerts:</b> ${unack.length} unacknowledged · ${store.alarmHr}/hr</li>
+      <li><b>Throughput:</b> ${store.throughput} tasks/hr · ${s.tasks} tasks completed</li></ul>
+      ${ev(chip('Open shift report',"ShiftReport.open()"))}${pill}`;
+    }
+    if(/why|fault|incident|down|stopp/.test(q)){
+      if(open.length){const i=open[0];return `Open incident <b>${e(dispId(i.id))}</b>: ${e(i.title)}.<ul><li>Source: ${e(dispId(i.src||'—'))} · severity ${e(i.sev||'—')}</li><li>Impact: ${e(i.impact||'—')}</li>${i.rca?`<li>Analysis: ${e(i.rca)}</li>`:''}</ul>${ev(chip('Incident replay',`openIncident('${e(i.id)}')`),chip(e(dispId(i.src||'')),`openRobot('${e(i.src||'')}')`))}${pill}`;}
+      if(faulted.length){const r=faulted[0];return `<b>${e(rl(r))}</b> is in <b>${e(r.status)}</b>${r.faultMsg?': '+e(r.faultMsg):''}. The detector opens an incident once the state persists for two polls.${ev(chip(e(rl(r)),`openRobot('${e(r.id)}')`),chip('Live map',"go('liveops')"))}${pill}`;}
+      return `No open incidents and no robot in fault at ${e(siteLabel())} right now.${ev(chip('Incidents',"go('incidents')"))}${pill}`;
+    }
+    if(/batter|charge/.test(q)){
+      return `Lowest battery is <b>${e(rl(low))}</b> at ${low.battery.toFixed(0)}% (${e(low.status)}); fleet average ${s.avgB.toFixed(0)}%. ${robots.filter(r=>r.battery<25&&r.status!=='charging').length} robot(s) below 25% and not charging.${ev(chip(e(rl(low)),`openRobot('${e(low.id)}')`),chip('Live map',"go('liveops')"))}${pill}`;
+    }
+    return `Fleet is <b>${s.health>=85?'healthy':s.health>=70?'degraded':'in trouble'}</b> at ${e(siteLabel())} — score ${s.health}/100.<ul>
+      <li>${robots.filter(r=>r.status==='active').length} active, ${robots.filter(r=>r.status==='charging').length} charging, ${s.faults} fault${s.faults===1?'':'s'} (${robots.length} robots)</li>
+      <li>${open.length} open incident${open.length===1?'':'s'} · ${unack.length} unacked alert${unack.length===1?'':'s'}</li>
+      <li>Throughput ${store.throughput} tasks/hr · avg battery ${s.avgB.toFixed(0)}%</li></ul>
+      ${ev(chip('Live map',"go('liveops')"),chip('Open incidents',"go('incidents')"))}${pill}`;
+  },
   answer(q){
+    if(liveNow())return this.answerLive(String(q||'').toLowerCase());
     const s=fleetStats(); q=q.toLowerCase();
     const ev=(...items)=>`<div class="ev">${items.join('')}</div>`;
     const chip=(l,fn)=>`<span class="evd" onclick="${fn}">${l}</span>`;
     if(q.includes('throughput')||q.includes('drop')||q.includes('14:00')||q.includes('fault?')||q.includes('amr-07')){
-      const inc=store.incidents[0];
+      const inc=store.incidents[0]||{state:'Open'};
       return `Throughput fell <b>−18%</b> between 14:02–14:26. Root cause, with evidence:
       <ul><li><b>14:02</b> — AMR-07's localization confidence collapsed to 0.31 (threshold 0.35) and it executed a protective stop mid-Aisle B3.</li>
       <li>The trigger: rack B3-04's reflector panel was moved during the 13:40 replenishment (WMS job W-2291).</li>
@@ -1458,7 +1988,7 @@ const Copilot={
     if(q.includes('service')||q.includes('maint')){
       return `<b>AMR-03</b> is your next service priority:
       <ul><li>Left drive-motor vibration is <b>2.8σ above baseline</b> and rising ~4%/day for 6 days.</li>
-      <li>Motor temp ${robots[2].motorTemp.toFixed(0)}°C vs fleet median 46°C.</li>
+      <li>Motor temp ${(robots[2]?robots[2].motorTemp:63).toFixed(0)}°C vs fleet median 46°C.</li>
       <li>Failure-model estimate: bearing wear, <b>RUL ≈ 12 days</b> (84% confidence).</li></ul>
       Acting this week is a planned 40-min swap; ignoring it is a likely mid-shift stop (~₹18K in lost throughput based on your cost/task). Bearing kit BRG-2044 is in stock.
       ${ev(chip('Create CMMS ticket',"toast('Ticket MT-88 pushed (mock)')"),chip('AMR-03 health',"openRobot('AMR-03')"),chip('Maintenance view',"go('maint')"))}`;
@@ -1466,8 +1996,8 @@ const Copilot={
     if(q.includes('handover')||q.includes('report')||q.includes('shift')){
       return `<b>Shift 2 handover — BLR-DC1 · ${clock()}</b>
       <ul><li><b>Output:</b> ${s.tasks} tasks · ${store.throughput} t/hr current · SLA ${store.sla}% (−0.9pp, incident-driven)</li>
-      <li><b>Fleet:</b> ${s.on}/10 available · avg battery ${s.avgB.toFixed(0)}% · utilization ${s.util}%</li>
-      <li><b>Incident:</b> INC-1042 (AMR-07 localization, Aisle B3) — ${store.incidents[0].state}. ${store.incidents[0].state==='Open'?'⚠ Hand over with recovery pending.':'Resolved via QR re-localization.'}</li>
+      <li><b>Fleet:</b> ${s.on}/${robots.length} available · avg battery ${s.avgB.toFixed(0)}% · utilization ${s.util}%</li>
+      <li><b>Incident:</b> INC-1042 (AMR-07 localization, Aisle B3) — ${(store.incidents[0]||{}).state}. ${(store.incidents[0]||{}).state==='Open'?'⚠ Hand over with recovery pending.':'Resolved via QR re-localization.'}</li>
       <li><b>Watch items:</b> AMR-03 drivetrain (service this week) · AMR-09 completing charge · reflector-audit SOP update pending sign-off</li>
       <li><b>Alerts:</b> ${store.alerts.filter(a=>!a.ack).length} unacked · rate ${store.alarmHr}/hr (budget ≤12)</li></ul>
       ${ev(chip('Copy to clipboard',"toast('Copied (mock)')"),chip('Email to shift 3 lead',"toast('Sent (mock)')"))}`;
@@ -1485,6 +2015,8 @@ const Copilot={
   }
 };
 
+Copilot.resolveUrls();   // v0.13: same-origin /ask when served from a real host
+
 /* ================= Shift report export (printable window + Markdown) ================= */
 const ShiftReport={
   esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');},
@@ -1493,7 +2025,7 @@ const ShiftReport={
     const s=fleetStats(), now=new Date();
     const useFnd=Array.isArray(store.findings)&&store.findings.length>0;
     return {
-      s, site:'BLR-DC1 · Bengaluru Fulfillment Center', simClock:clock(),
+      s, site:siteLabel(true), simClock:clock(),
       when:now.toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'}),
       throughput:store.throughput, sla:store.sla, alarmHr:store.alarmHr,
       unack:store.alerts.filter(a=>!a.ack),
@@ -1691,7 +2223,8 @@ const Palette={
     it.push({ic:'🎓',label:'Open Academy',hint:'app',run:()=>{const a=$('#btn-academy');window.open(a?a.href:'academy/index.html','_blank','noopener');}});
     it.push({ic:'✓',label:'Ack all info alerts',hint:'action',run:()=>ackAllInfo()});
     it.push({ic:'?',label:'Replay first-run tour',hint:'action',run:()=>Tour.start()});
-    robots.forEach(r=>it.push({ic:'⬡',label:r.id+' — '+r.vendor,hint:'robot',run:()=>openRobot(r.id)}));
+    it.push({ic:'⬡',label:'Workspace & Connect robots',hint:'view',run:()=>go('fleet')});
+    robots.forEach(r=>it.push({ic:'⬡',label:rl(r)+' — '+r.vendor,hint:'robot',run:()=>openRobot(r.id)}));
     return it;
   },
   update(q){
@@ -1736,7 +2269,13 @@ const Tour={
   ],
   seen(){try{return localStorage.getItem(this.KEY)==='1';}catch(e){return true;}},
   markSeen(){try{localStorage.setItem(this.KEY,'1');}catch(e){}},
-  maybeStart(){if(!this.seen())setTimeout(()=>this.start(),600);},
+  maybeStart(){
+    if(this.seen()||this.on)return;
+    // v0.13: never on top of the sign-in modal, and never over an empty
+    // sign-in-required screen — there is nothing to point at yet.
+    const si=$('#signin');if(si&&si.classList.contains('open'))return;
+    if(typeof Sync!=='undefined'&&Sync.mode==='auth')return;
+    setTimeout(()=>{const s=$('#signin');if(s&&s.classList.contains('open'))return;this.start();},600);},
   start(i){this.i=i||0;this.on=true;this.ensure();this.show();},
   ensure(){
     if($('#tour-block'))return;
@@ -1789,14 +2328,11 @@ const Tour={
 };
 
 /* ================= Supabase sync (polling PostgREST, leader-elected sim) ================= */
-/* Backend is configurable via URL query params (defaults unchanged):
-     ?supa=<PostgREST base url>  overrides SUPA_URL
-     ?key=<anon key>             overrides SUPA_KEY
-     ?site=<site id>             exposed as window.SITE (no filtering yet)   */
-const _cfg=new URLSearchParams(location.search);
-const SUPA_URL=_cfg.get('supa')||'https://flwyvhsmgrrqpmhcqlzd.supabase.co';
-const SUPA_KEY=_cfg.get('key')||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
-window.SITE=_cfg.get('site')||null;
+/* Backend is configurable via URL query params — SUPA_URL / SUPA_KEY /
+   window.SITE / DEMO_TOKEN / MOCK_MODE are all read once at the top of the
+   script (v0.13). Every table query below is scoped with site_id=eq.<SITE>
+   when a site is known, so a workspace only ever sees its own rows even
+   before RLS is consulted. */
 
 /* v0.13: admin settings panel — the 8 operational credentials an `admin`
    may rotate live via admin_list_settings()/admin_set_setting(). Mirrors
@@ -1910,9 +2446,14 @@ const YFAuth={
     this.state={jwt:d.access_token,refresh:d.refresh_token||null,
       email:(d.user&&d.user.email)||email,role:null,site:null};
     await this.fetchRole();
+    // v0.13: self-serve — resolve (or bootstrap) the person's own workspace
+    // before the first scoped pull, so the console opens on THEIR site.
+    if(typeof Workspace!=='undefined')await Workspace.load();
     this.save();this.renderHeader();
     if(typeof Sync!=='undefined')Sync.onAuthChange();
-    toast(greeting+this.state.email+' · role: '+(this.state.role||'none'));
+    const ws=(typeof Workspace!=='undefined'&&Workspace.ws)||null;
+    toast(greeting+this.state.email+(ws&&ws.site_id?' · workspace '+ws.name+' ('+(this.state.role||'—')+')':' · role: '+(this.state.role||'none')));
+    if(ws&&ws.site_id&&!robots.length&&typeof Sync!=='undefined'){Sync.robotsEmptySince=Date.now()-Sync.EMPTY_AFTER_MS;go('overview');}
   },
   async login(email,password){
     const r=await this._authPost('/auth/v1/token?grant_type=password',{email,password});
@@ -1946,7 +2487,10 @@ const YFAuth={
     const c=this.parseJwt(this.state.jwt);
     if(c&&c.yf_role){this.state.role=c.yf_role;this.state.site=c.site_id||this.state.site;return;}
     this.state.role='operator';
-    toast('⚠ WARN: no role found for your account — assuming operator in the UI only (the backend still enforces real permissions, so a role-less account effectively views). Ask your admin to assign a role (docs/SECURITY.md)');
+    // v0.13: a self-serve deployment bootstraps a workspace (and the admin
+    // role) a moment later in Workspace.load(); only warn when it cannot.
+    setTimeout(()=>{if(this.authed()&&!(typeof Workspace!=='undefined'&&Workspace.ws&&Workspace.ws.site_id))
+      toast('⚠ WARN: no role found for your account — assuming operator in the UI only (the backend still enforces real permissions, so a role-less account effectively views). Ask your admin to assign a role (docs/SECURITY.md)');},1500);
   },
   /** grant_type=refresh_token — single-flight so parallel 401s refresh once. */
   refreshToken(){
@@ -1967,7 +2511,9 @@ const YFAuth={
   logout(){
     this.state={jwt:null,refresh:null,email:null,role:null,site:null};
     try{localStorage.removeItem(this.KEY);}catch(e){}
-    this._prompted=false;this.renderHeader();
+    this._prompted=false;
+    if(typeof Workspace!=='undefined'){Workspace.clear();window.SITE=_cfg.get('site')||null;}
+    this.renderHeader();
     if(typeof Sync!=='undefined')Sync.onAuthChange();
     toast('Signed out');
   },
@@ -1989,8 +2535,15 @@ const YFAuth={
     // v0.13/v0.18: the Settings and Config nav entries are admin-only —
     // every auth state transition (login/logout/expiry) already routes
     // through here.
-    const nb=$('#nav-settings'); if(nb) nb.style.display=(this.state.role==='admin')?'':'none';
-    const ncb=$('#nav-config'); if(ncb) ncb.style.display=(this.state.role==='admin')?'':'none';
+    // Settings/Config rotate DEPLOYMENT-wide credentials (0008/0018) — a
+    // workspace admin is admin of their site, not of the box, so those two
+    // stay hidden inside a self-serve workspace.
+    const platformAdmin=this.state.role==='admin'&&!(typeof Workspace!=='undefined'&&Workspace.active());
+    const nb=$('#nav-settings'); if(nb) nb.style.display=platformAdmin?'':'none';
+    const ncb=$('#nav-config'); if(ncb) ncb.style.display=platformAdmin?'':'none';
+    const av=$('#avatar'); if(av){const em=this.state.email||'';
+      av.textContent=this.authed()?(em.slice(0,2).toUpperCase()):'?';
+      av.title=this.authed()?em:'Not signed in';}
   },
   mode:'in',                                    // 'in' = sign in · 'up' = create account
   ensure(){
@@ -1998,7 +2551,7 @@ const YFAuth={
     const d=document.createElement('div');d.id='signin';
     d.innerHTML=`<div class="si-box">
       <h2>Account <button class="btn ghost sm" style="margin-left:auto" onclick="YFAuth.close()">✕</button></h2>
-      <div class="si-sub">FleetMind console · Supabase Auth</div>
+      <div class="si-sub">Yantrika Cloud · free account · your own workspace in seconds</div>
       <div class="si-tabs" role="tablist">
         <button class="si-tab on" id="si-tab-in" role="tab" onclick="YFAuth.setMode('in')">Sign in</button>
         <button class="si-tab" id="si-tab-up" role="tab" onclick="YFAuth.setMode('up')">Create account</button>
@@ -2011,7 +2564,8 @@ const YFAuth={
       <div id="si-msg"></div>
       <button class="btn primary" id="si-submit">Sign in</button>
       <div class="si-foot"><span style="color:var(--muted)" id="si-note">Roles are enforced server-side (RLS)</span>
-        <a id="si-demo" onclick="YFAuth.close();toast('Continuing in demo mode — anonymous access')">Continue in demo mode</a></div>
+        <a id="si-demo" onclick="YFAuth.close();toast('Continuing in demo mode — anonymous access')">Continue in demo mode</a>
+        <a id="si-mock" onclick="location.hash='demo';location.reload()" title="Explore the console with mock data — no account needed">Explore the demo instead</a></div>
     </div>`;
     document.body.appendChild(d);
     d.addEventListener('mousedown',e=>{if(e.target===d)this.close();});
@@ -2027,7 +2581,7 @@ const YFAuth={
     $('#si-pass2-lbl').hidden=$('#si-pass2').hidden=m!=='up';
     if(m!=='up')$('#si-pass2').value='';
     $('#si-note').textContent=m==='up'
-      ?'New accounts may need a role assigned before data shows — see docs/SECURITY.md'
+      ?'You get your own workspace and the admin role the moment the account exists'
       :'Roles are enforced server-side (RLS)';
     $('#si-err').textContent='';$('#si-msg').textContent='';
   },
@@ -2036,11 +2590,14 @@ const YFAuth={
     // 'continue in demo mode' only while the backend still allows anon —
     // once a 401 marked it auth-required the link would just mislead.
     const demo=$('#si-demo');if(demo)demo.style.display=(typeof Sync!=='undefined'&&Sync.authRequired)?'none':'';
+    const mock=$('#si-mock');if(mock)mock.style.display=MOCK_MODE?'none':'';
     this.setMode(this.mode);
     $('#signin').classList.add('open');
+    if(typeof Tour!=='undefined'&&Tour.on)Tour.done(false);   // never two overlays at once
     const em=$('#si-email');if(em)em.focus();
   },
-  close(){const d=$('#signin');if(d)d.classList.remove('open');},
+  close(){const d=$('#signin');if(d)d.classList.remove('open');
+    if(typeof Tour!=='undefined'&&this.authed())Tour.maybeStart();},
   async submit(){
     const email=($('#si-email').value||'').trim(),pass=$('#si-pass').value||'';
     const err=$('#si-err'),msg=$('#si-msg'),btn=$('#si-submit');
@@ -2088,11 +2645,26 @@ const Sync={
       &&Date.now()-this.robotsEmptySince>=this.EMPTY_AFTER_MS;
   },
   /** apikey is ALWAYS the anon key (PostgREST convention); Authorization
-      carries the user JWT once signed in, else the anon key as before. */
+      carries the user JWT once signed in, else the anon key as before.
+      v0.13: a sandbox token rides along as x-yf-demo-token (0009). */
   hdr(extra){
     const bearer=(typeof YFAuth!=='undefined'&&YFAuth.state.jwt)?YFAuth.state.jwt:SUPA_KEY;
-    return Object.assign({'apikey':SUPA_KEY,'Authorization':'Bearer '+bearer,'Content-Type':'application/json'},extra||{});},
+    const h={'apikey':SUPA_KEY,'Authorization':'Bearer '+bearer,'Content-Type':'application/json'};
+    if(DEMO_TOKEN)h['x-yf-demo-token']=DEMO_TOKEN;
+    return Object.assign(h,extra||{});},
+  /** `table?query` with the site filter appended when a site is known.
+      PostgREST ANDs query params, so this composes with any filter. */
+  tq(table,query){
+    // Legacy single-site deployments (BLR-DC1, rows that predate 0005) keep
+    // the unfiltered reads they always had; a workspace or sandbox is
+    // always pinned to its own site_id.
+    const site=window.SITE, scoped=site&&(isWorkspaceSite(site)||isDemoSite(site));
+    return table+'?'+(query||'select=*')+(scoped?'&site_id=eq.'+encodeURIComponent(site):'');},
+  /** Rows the console writes carry the site they belong to (0007/0009/0019
+      all pin WITH CHECK to it — an unstamped row would be refused). */
+  stamp(row){ if(window.SITE)row.site_id=window.SITE; return row; },
   async q(path,opt,_retried){ // fetch wrapper, 4s timeout; one refresh-retry on 401
+    if(MOCK_MODE){const err=new Error('mock mode: no backend');err.status=0;throw err;}
     const c=new AbortController();const t=setTimeout(()=>c.abort(),4000);
     try{const r=await fetch(SUPA_URL+'/rest/v1/'+path,Object.assign({signal:c.signal},opt,{headers:this.hdr(opt&&opt.headers)}));
       clearTimeout(t);
@@ -2112,8 +2684,15 @@ const Sync={
     }catch(e){clearTimeout(t);throw e;}
   },
   setChip(){const d=$('#cloud-dot'),l=$('#cloud-lbl');if(!d)return;
-    const m={leader:['var(--good)','Cloud: LIVE · simulating'],follower:['var(--s1)','Cloud: LIVE · viewing'],local:['var(--warn)','Local sim (offline)'],connecting:['var(--muted)','connecting…'],nodb:['var(--crit)','Run schema SQL ⇒ retry'],auth:['var(--warn)','Sign in required']};
-    const[c,txt]=m[this.mode]||m.connecting;d.style.background=c;l.textContent=txt;},
+    const m={leader:['var(--good)','Cloud: LIVE · simulating'],follower:['var(--s1)',DEMO_TOKEN?'Sandbox: LIVE':'Cloud: LIVE · viewing'],local:['var(--warn)',MOCK_MODE?'Demo · mock data':'Local sim (offline)'],connecting:['var(--muted)','connecting…'],nodb:['var(--crit)','Run schema SQL ⇒ retry'],auth:['var(--warn)','Sign in required · your fleet is private']};
+    const[c,txt]=m[this.mode]||m.connecting;d.style.background=c;l.textContent=txt;
+    const mp=$('#mode-pill');if(mp){mp.textContent=MOCK_MODE?'DEMO · mock data':DEMO_TOKEN?'SANDBOX':this.mode==='auth'?'sign in':(typeof Workspace!=='undefined'&&Workspace.active())?'cloud':'console';}
+    const nf=$('#nav-foot-sub');if(nf)nf.innerHTML=MOCK_MODE?'VDA 5050 · 3 vendors<br><span style="color:var(--warn)">●</span> mock data':(this.mode==='leader'||this.mode==='follower')?'VDA 5050 v2.1<br><span style="color:#0ca30c">●</span> live feed connected':'VDA 5050 v2.1 · multi-vendor';
+    // v0.13: nothing of the mock narrative must leak into a signed-in-required state
+    if(this.mode==='auth'&&robots.length&&!this._cleared){this._cleared=true;this.clearMock();}},
+  /** Drop the scripted mock fleet so an RBAC backend shows a clean sign-in
+      state instead of ten imaginary robots moving behind the modal. */
+  clearMock(){robots.length=0;store.alerts=[];store.incidents=[];store.missions=[];store.commands=[];store.tickets=[];store.thrHist=[];store.throughput=0;store.alarmHr=0;render(true);},
   /* v0.11: identity changed (sign-in/out) — re-elect and re-pull with the new headers */
   onAuthChange(){
     if(typeof YFAuth!=='undefined'&&YFAuth.authed()){
@@ -2126,29 +2705,60 @@ const Sync={
     render(true);
   },
   async init(){
+    if(MOCK_MODE){ // v0.13: demo — the local sim is the product here, by design
+      this.mode='local';this.setChip();return; }
+    if(DEMO_TOKEN){ // v0.13: sandbox — fleet_meta is off-limits to anon (no site_id); the sim drives, we view
+      this.mode='follower';this.setChip();
+      await this.pullSeed();
+      setInterval(()=>this.cycle().catch(()=>{}),2000);
+      Sandbox.start();
+      toast('🧪 Sandbox fleet connected — it is yours for the next '+Sandbox.leftText()+'. Nothing here is real.');
+      return; }
     try{ await this.q('fleet_meta?select=id&limit=1'); }
     catch(e){ this.mode = String(e).includes('404')||String(e).includes('406')?'nodb':'local'; this.setChip();
-      if(this.mode==='nodb')toast('⚠ Supabase reachable but schema missing — run fleetmind_schema.sql in the SQL Editor, then reload.');
-      else toast('Supabase unreachable from this network — running local sim.');
+      if(this.mode==='nodb')toast('⚠ Supabase reachable but schema missing — run `yantraops migrate` (supabase/README.md), then reload.');
+      else if(this.mode!=='auth')toast('Supabase unreachable from this network — running local sim.');
       if(this.mode==='nodb')this.mode='local';
       return; }
     await this.claim(); this.setChip();
     await this.pullSeed();
     setInterval(()=>this.cycle().catch(()=>{}),2000);
     setInterval(()=>this.claim().catch(()=>{}),10000); // failover check
-    if(this.mode!=='auth')toast(this.mode==='leader'?'☁ Connected to Supabase — this tab is running the fleet':'☁ Connected — another tab is simulating; this one is a live viewer');
+    if(this.mode!=='auth')toast(this.mode==='leader'?'☁ Connected to Supabase — this tab is running the fleet':'☁ Connected — a live feed is publishing; this tab is a viewer');
   },
   /* pull seeded incidents/missions (on connect, and again after sign-in) */
   async pullSeed(){
-    try{const inc=await this.q('incidents?select=*&order=created_at.desc');
-      if(inc&&inc.length)store.incidents=inc.map(i=>({id:i.id,sev:i.sev,title:i.title,src:i.src,t:i.tlabel,state:i.state,impact:i.impact,rca:i.rca||'Automated detection (yantradetect) — root-cause analysis pending.',fix:i.fix||'Inspect the robot on the floor · acknowledge related alerts · ask the copilot for telemetry around the event.',dur:i.dur,created_at:i.created_at}));
-      const ms=await this.q('missions?select=*&order=id');
-      if(ms&&ms.length)store.missions=ms.map(m=>({id:m.id,name:m.name,robots:m.robots,state:m.state,prog:m.prog,eta:m.eta}));
+    try{const inc=await this.q(this.tq('incidents','select=*&order=created_at.desc&limit=40'));
+      if(inc&&(inc.length||liveNow()))store.incidents=inc.map(i=>({id:i.id,sev:i.sev,title:i.title,src:i.src,t:i.tlabel,state:i.state,impact:i.impact,rca:i.rca||'Automated detection (yantradetect) — root-cause analysis pending.',fix:i.fix||'Inspect the robot on the floor · acknowledge related alerts · ask the copilot for telemetry around the event.',dur:i.dur,created_at:i.created_at}));
+      const ms=await this.q(this.tq('missions','select=*&order=id'));
+      if(ms&&(ms.length||liveNow()))store.missions=ms.map(m=>({id:m.id,name:m.name,robots:Array.isArray(m.robots)?m.robots:[],state:m.state,prog:m.prog,eta:m.eta}));
     }catch(e){}
+  },
+  /** v0.13: live rows replace the mock fleet — unknown ids become robots,
+      ids that stopped reporting go away (only on a non-empty answer, so a
+      transient blip never wipes the screen). Returns the row→robot pairs. */
+  adoptRows(rows){
+    if(!Array.isArray(rows)||!rows.length)return [];
+    if(!this._adopted){ // first live rows: the scripted mock fleet is replaced wholesale
+      this._adopted=true; robots.length=0;
+      store.alerts=store.alerts.filter(a=>typeof a.t!=='number'); store.tickets=[];
+      if(store.incidents.some(i=>i.id==='INC-1042'))store.incidents=[];
+      if(store.missions.some(m=>m.id==='M-311'))store.missions=[];
+    }
+    const seen=new Set(), out=[];
+    rows.forEach((d,i)=>{let r=robots.find(x=>x.id===d.id);
+      if(!r){r=mkRobot(String(d.id),d.vendor||'—',i+1);r.status='idle';robots.push(r);}
+      seen.add(r.id); out.push([d,r]);});
+    for(let i=robots.length-1;i>=0;i--)if(!seen.has(robots[i].id))robots.splice(i,1);
+    robots.sort((a,b)=>a.id.localeCompare(b.id));
+    return out;
   },
   async claim(){
     // RBAC backend + still anonymous: nothing to elect — wait for sign-in.
     if(this.authRequired&&typeof YFAuth!=='undefined'&&!YFAuth.authed()){this.mode='auth';this.setChip();return;}
+    // v0.13: a workspace never runs the mock sim as leader — its fleet is
+    // driven server-side (simulated or real); this tab only ever views.
+    if(typeof Workspace!=='undefined'&&Workspace.active()){this.mode='follower';this.setChip();return;}
     try{
       const rows=await this.q('fleet_meta?id=eq.1&select=writer_id,updated_at');
       const row=rows&&rows[0];
@@ -2191,39 +2801,39 @@ const Sync={
   /* ---- v0.9 audit trail: full command history, all statuses ---- */
   async pullAudit(){
     try{
-      const rows=await this.q('commands?select=*&order=created_at.desc&limit=50');
+      const rows=await this.q(this.tq('commands','select=*&order=created_at.desc&limit=50'));
       store.audit=rows||[];
     }catch(e){/* commands table may not exist — keep store.audit as-is (null → graceful empty state) */}
   },
   /* ---- v0.4 missions sync ---- */
   async pullMissions(){
     try{
-      const ms=await this.q('missions?select=*&order=created_at.desc.nullslast&limit=30');
-      if(ms&&ms.length)store.missions=ms.map(m=>({id:m.id,name:m.name,robots:Array.isArray(m.robots)?m.robots:[],state:m.state||'Queued',prog:m.prog!=null?+m.prog:0,eta:m.eta||'—'}));
+      const ms=await this.q(this.tq('missions','select=*&order=created_at.desc.nullslast&limit=30'));
+      if(ms&&(ms.length||this._adopted))store.missions=ms.map(m=>({id:m.id,name:m.name,robots:Array.isArray(m.robots)?m.robots:[],state:m.state||'Queued',prog:m.prog!=null?+m.prog:0,eta:m.eta||'—'}));
     }catch(e){/* missions table optional — keep current rows */}
   },
   insertMission(m){ if(this.mode==='local'||this.mode==='connecting')return;
     this.q('missions',{method:'POST',headers:{'Prefer':'return=minimal'},
-      body:JSON.stringify({id:m.id,name:m.name,robots:m.robots,state:m.state,prog:m.prog,eta:m.eta})})
+      body:JSON.stringify(this.stamp({id:(window.SITE?window.SITE+'-':'')+m.id,name:m.name,robots:m.robots,state:m.state,prog:m.prog,eta:m.eta}))})
       .catch(()=>toast('⚠ Mission saved locally only (cloud insert failed)')); },
   /* ---- v0.4 maintenance findings (table may not exist → store.findings stays null → mock tickets) ---- */
   async pullFindings(){
     try{
-      const rows=await this.q('maintenance_findings?select=*&order=created_at.desc.nullslast&limit=30');
+      const rows=await this.q(this.tq('maintenance_findings','select=*&order=created_at.desc.nullslast&limit=30'));
       store.findings=(rows||[]).filter(f=>!f.state||/open/i.test(String(f.state)));
     }catch(e){ store.findings=null; }
   },
   /* ---- v0.2 command queue (human-in-the-loop gate) ---- */
   queueCommand(robotId,cmd){
     // v0.11: signed-in users request as themselves (0007 WITH CHECK requires it)
-    const who=(typeof YFAuth!=='undefined'&&YFAuth.authed())?YFAuth.state.email:'console:PN';
+    const who=(typeof YFAuth!=='undefined'&&YFAuth.authed())?YFAuth.state.email:(DEMO_TOKEN?'sandbox:visitor':'console:anon');
     this.q('commands',{method:'POST',headers:{'Prefer':'return=minimal'},
-      body:JSON.stringify({robot_id:robotId,cmd,requested_by:who})})
+      body:JSON.stringify(this.stamp({robot_id:robotId,cmd,requested_by:who}))})
       .then(()=>this.pullCommands()).catch(()=>toast('⚠ Could not queue command (is 0002_commands.sql applied?)'));
   },
   async pullCommands(){
     try{
-      const rows=await this.q('commands?select=*&status=in.(pending,approved)&order=created_at.asc&limit=12');
+      const rows=await this.q(this.tq('commands','select=*&status=in.(pending,approved)&order=created_at.asc&limit=12'));
       store.commands=rows||[];
       const el=$('#ov-approvals'); if(el)renderApprovals(el);
     }catch(e){/* table may not exist yet — silently skip */}
@@ -2267,6 +2877,7 @@ const Sync={
       pos:[+r.pos[0].toFixed(1),+r.pos[1].toFixed(1)],speed:+r.speed.toFixed(2),task_kind:r.task?r.task.kind:null,
       health:+r.health.toFixed(1),motor_temp:+r.motorTemp.toFixed(1),tasks_done:r.tasksDone,fault_msg:r.faultMsg||null,
       updated_at:new Date().toISOString()}));
+    rows.forEach(r=>this.stamp(r));
     await this.q('robots?on_conflict=id',{method:'POST',headers:{'Prefer':'resolution=merge-duplicates'},body:JSON.stringify(rows)});
     await this.q('fleet_meta?id=eq.1',{method:'PATCH',body:JSON.stringify({writer_id:this.me,sim_min:simMin,throughput:store.throughput,updated_at:new Date().toISOString()})});
     // reflect acks made elsewhere
@@ -2274,10 +2885,10 @@ const Sync={
       if(als)als.forEach(a=>{const l=store.alerts.find(x=>x.id===a.id);if(l)l.ack=true;});}catch(e){}
   },
   async pull(){
-    const rows=await this.q('robots?select=*');
+    const rows=await this.q(this.tq('robots','select=*&order=id.asc&limit=200'));
     this.noteRobots(rows);
     if(rows&&rows.length){
-      rows.forEach(d=>{const r=robots.find(x=>x.id===d.id);if(!r)return;
+      this.adoptRows(rows).forEach(([d,r])=>{
         r.vendor=d.vendor||r.vendor;r.status=normStatus(d.status);
         if(d.battery!=null)r.battery=+d.battery;
         const np=posToSvg(d.pos);if(np)r.pos=np;
@@ -2289,15 +2900,28 @@ const Sync={
         r.faultMsg=d.fault_msg||null;
         r.spdHist.push(r.speed);if(r.spdHist.length>40)r.spdHist.shift();});
     }
-    const meta=await this.q('fleet_meta?id=eq.1&select=sim_min,throughput');
-    if(meta&&meta[0]){simMin=+meta[0].sim_min;store.throughput=meta[0].throughput;
-      if(tick%4===0){store.thrHist.push({t:simMin,v:store.throughput});if(store.thrHist.length>60)store.thrHist.shift();}}
-    const als=await this.q('alerts?select=*&order=created_at.desc&limit=25');
+    // fleet_meta has no site_id: a sandbox (anon) and a workspace writer never
+    // touch it, so throughput/clock are derived from the rows themselves there.
+    if(!DEMO_TOKEN&&!(typeof Workspace!=='undefined'&&Workspace.active())){
+      const meta=await this.q('fleet_meta?id=eq.1&select=sim_min,throughput');
+      if(meta&&meta[0]){simMin=+meta[0].sim_min;store.throughput=meta[0].throughput;
+        if(tick%4===0){store.thrHist.push({t:simMin,v:store.throughput});if(store.thrHist.length>60)store.thrHist.shift();}}
+    }else{
+      const now=new Date(); simMin=now.getHours()*60+now.getMinutes()+now.getSeconds()/60;
+      const done=robots.reduce((s,r)=>s+(r.tasksDone||0),0);
+      if(this._lastDone==null){this._lastDone=done;this._lastDoneAt=Date.now();}
+      else if(Date.now()-this._lastDoneAt>=60000){
+        store.throughput=Math.max(0,Math.round((done-this._lastDone)*3600000/(Date.now()-this._lastDoneAt)));
+        this._lastDone=done;this._lastDoneAt=Date.now();
+        store.thrHist.push({t:simMin,v:store.throughput});if(store.thrHist.length>60)store.thrHist.shift();}
+    }
+    const als=await this.q(this.tq('alerts','select=*&order=created_at.desc&limit=25'));
     if(als)store.alerts=als.map(a=>({id:a.id,sev:a.sev,msg:a.msg,src:a.src,t:a.tlabel||'—',ack:a.ack}));
+    store.alarmHr=store.alerts.filter(a=>!a.ack&&a.sev!=='info').length;
     tick++;
   },
   insertAlert(a){ if(this.mode!=='leader')return;
-    this.q('alerts',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify({id:a.id,sev:a.sev,msg:a.msg,src:a.src,tlabel:clock2(a.t)})}).catch(()=>{}); },
+    this.q('alerts',{method:'POST',headers:{'Prefer':'return=minimal'},body:JSON.stringify(this.stamp({id:a.id,sev:a.sev,msg:a.msg,src:a.src,tlabel:clock2(a.t)}))}).catch(()=>{}); },
   ackAlert(id){ if(this.mode==='local')return;
     this.q('alerts?id=eq.'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({ack:true})}).catch(()=>{}); },
   patchIncident(id,body){ if(this.mode==='local')return;
@@ -2350,10 +2974,42 @@ VIEWS.overview();rLiveOps();$('#v-liveops').classList.remove('on');$('#v-overvie
 YFAuth.renderHeader();   // v0.11: Sign in button / signed-in identity chip
 {const vc=$('#yf-version');if(vc)vc.textContent='Yantrika v'+YF_VERSION;}
 sampleAvail();   // seed one availability sample so the SLA card never starts empty
-setInterval(()=>{ if(Sync.mode!=='follower')step(0.4); sampleAvail(); render(false); },400);
-Sync.init();
-Tour.maybeStart();   // first visit only (localStorage-gated) — replay via the header ? button
-setTimeout(()=>toast('👋 Tips: click AMR-07 (red, pulsing) on Live Ops · open INC-1042 replay · ⌘K palette · ⌘J Copilot'),1200);
+/* The local mock sim only ever runs when nothing live is driving the fleet:
+   never as a follower, never in a sign-in-required state, never for a
+   workspace (its fleet is server-side). */
+setInterval(()=>{ if(Sync.mode!=='follower'&&Sync.mode!=='auth'&&!Workspace.active())step(0.4); sampleAvail(); render(false); },400);
+
+/* ---- v0.13 mode banner (demo / sandbox) ---- */
+(function banner(){
+  const b=$('#banner');if(!b)return;
+  const signup=`<button class="btn cta" onclick="YFAuth.setMode('up');YFAuth.show()">Create free account</button>`;
+  const signin=`<button class="btn" onclick="YFAuth.setMode('in');YFAuth.show()">Sign in</button>`;
+  if(MOCK_MODE){
+    b.innerHTML=`<span>🧪 <b>Demo with mock data</b> — a scripted warehouse so you can click everything. Nothing here is real and nothing is saved.</span>
+      <span class="acts">${_served?`<a class="btn" href="/#demo-live">Try a live sandbox fleet</a>`:''}${signin}${signup}</span>`;
+    b.classList.add('on');$('#app').classList.add('has-banner');
+  }else if(DEMO_TOKEN){
+    b.innerHTML=`<span>⏳ <b>Live sandbox</b> — a real fleet on a throwaway site. It expires on its own and takes its data with it. Like it? Keep a workspace of your own.</span>
+      <span class="acts">${signin}${signup}</span>`;
+    b.classList.add('on');$('#app').classList.add('has-banner');
+  }
+})();
+Workspace.applyHeader();
+
+/* ---- boot: a stored session resolves its workspace BEFORE the first pull ---- */
+(async()=>{
+  if(YFAuth.authed()&&!MOCK_MODE&&!DEMO_TOKEN){await Workspace.load();YFAuth.renderHeader();}
+  await Sync.init();
+  if(Workspace.active()&&!robots.length)Sync.robotsEmptySince=Date.now()-Sync.EMPTY_AFTER_MS; // show Get started at once
+  render(true);
+  // #signup / #signin intents from the marketing site
+  if(!YFAuth.authed()&&!MOCK_MODE&&!DEMO_TOKEN){
+    if(_hash==='signup'){YFAuth.setMode('up');YFAuth.show();}
+    else if(_hash==='signin'){YFAuth.setMode('in');YFAuth.show();}
+  }
+  Tour.maybeStart();   // first visit only (localStorage-gated) — replay via the header ? button
+  if(MOCK_MODE)setTimeout(()=>toast('👋 Tips: click AMR-07 (red, pulsing) on Live Ops · open INC-1042 replay · ⌘K palette · ⌘J Copilot'),1200);
+})();
 </script>
 </body>
 </html>

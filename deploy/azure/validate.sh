@@ -364,6 +364,28 @@ awk '/^server \{/{inside=1}
     && fail "limit_req_zone is inside server{} -- http-context directive; nginx -t would fail on boot" \
     || pass "limit_req_zone sits in http{} context, outside server{}"
 
+# -- self-serve workspace door (v0.13): same shared template, same door --------
+grep -q 'location /api/workspace/ {' "$TEMPLATE" \
+    && pass "shared nginx template has the /api/workspace/ location (the console's simulated-fleet buttons)" \
+    || fail "shared nginx template is MISSING location /api/workspace/"
+grep -q 'limit_req_zone \$binary_remote_addr zone=yantra_ws:10m rate=30r/m;' "$TEMPLATE" \
+    && pass "limit_req_zone yantra_ws declared (30r/m)" \
+    || fail "limit_req_zone yantra_ws (30r/m) MISSING"
+grep -A30 'location /api/workspace/ {' "$TEMPLATE" | grep -qE '^\s+limit_req zone=yantra_ws burst=10 nodelay;' \
+    && pass "location /api/workspace/ applies limit_req zone=yantra_ws burst=10 nodelay" \
+    || fail "limit_req zone=yantra_ws declared but never applied to /api/workspace/"
+grep -A30 'location /api/workspace/ {' "$TEMPLATE" | grep -q 'proxy_pass http://127.0.0.1:8088;' \
+    && pass "/api/workspace/ proxies to the sandbox door on 127.0.0.1:8088" \
+    || fail "/api/workspace/ does not proxy to 127.0.0.1:8088"
+awk '/^server \{/{inside=1}
+     inside && /^[[:space:]]*limit_req_zone[[:space:]]/{found=1}
+     END{exit !found}' "$TEMPLATE" \
+    && fail "a limit_req_zone is inside server{} -- http-context directive; nginx -t would fail on boot" \
+    || pass "every limit_req_zone (demo + workspace) sits in http{} context, outside server{}"
+grep -q -- '--workspace-max-live 12' "$REPO_ROOT/deploy/aws/systemd/yantra-sandbox.service" \
+    && pass "yantra-sandbox ships --workspace-max-live 12" \
+    || fail "yantra-sandbox is missing --workspace-max-live 12"
+
 # The door's own /healthz carries operational counters and must stay on
 # loopback; /health on this box already belongs to the sarathi copilot.
 grep -q 'location /healthz' "$TEMPLATE" \

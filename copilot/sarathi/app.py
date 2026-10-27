@@ -36,6 +36,10 @@ CONFIG_KEYS = ("SARATHI_LOW_BATTERY_THRESHOLD",)
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+    #: Optional workspace / site the question is about (docs/WORKSPACES.md
+    #: section 6). A short slug - it ends up in a PostgREST ``eq.`` filter.
+    site: str | None = Field(
+        default=None, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]*$")
 
 
 class EvidenceItem(BaseModel):
@@ -134,7 +138,13 @@ def create_app(
                 headers={"WWW-Authenticate": "Bearer"},
             )
         t0 = time.perf_counter()
-        result = request.app.state.service.ask(req.question.strip())
+        # The asker's own credentials, if the console forwarded them: the
+        # copilot then reads as that person (RLS decides what they see).
+        result = request.app.state.service.ask(
+            req.question.strip(), site=req.site,
+            user_token=request.headers.get("x-yf-user-token"),
+            demo_token=request.headers.get("x-yf-demo-token"),
+        )
         return AskResponse(
             answer=result.answer,
             evidence=[EvidenceItem(**e) for e in result.evidence],

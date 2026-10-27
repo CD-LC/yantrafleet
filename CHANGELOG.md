@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.13.0 — 2026-10-21
+- **Yantrika Cloud: self-serve workspaces** (`supabase/0019_workspaces.sql`,
+  OPT-IN). Creating an account now provisions a private workspace: a
+  `WS-<hex>` site, the admin role, up to 10 **ingest keys** (`yk_…`, hashed
+  at rest, resolved by `yf_ingest_site()` from the `x-yf-ingest-key`
+  header, every fleet-table policy pinned to that one site), team invites
+  across the four roles, and a one-click **simulated fleet** driven
+  server-side by the `yantraops` door (`POST /api/workspace/sim/start`,
+  JWT forwarded to PostgREST — the door holds no privilege of its own).
+  Full contract in `docs/WORKSPACES.md`.
+- **Console: four ways in, one file.** `?mode=demo` / `#demo` opens the
+  console on mock data with no backend and no sign-in prompt (the
+  marketing site's "See the demo — no login"); `?demo=<token>` finally
+  makes the 0009 sandbox work end-to-end (the token goes out as
+  `x-yf-demo-token`, `fleet_meta` is skipped, a countdown chip and an
+  expiry modal replace a silent empty screen); signed in, `my_workspace()`
+  scopes every query to the person's own site; `#signup` / `#signin`
+  open the account modal from a marketing link that survives nginx's
+  bare-`/console/` redirect.
+- **Console: dynamic fleet.** Robots are adopted from the rows that arrive
+  (any ids, any count) instead of being hard-wired to AMR-01…10; ids
+  namespaced with the site are stripped for display; the mock fleet never
+  moves behind a sign-in-required screen any more; the first-run tour
+  never overlaps the sign-in modal; Overview's "Top issues" and the
+  offline copilot answer from live rows instead of the scripted INC-1042
+  story when a backend is connected.
+- **Console: Workspace & Connect view** replaces the mock "Fleet &
+  Connectors": rename, simulated-fleet start/stop, ingest-key create /
+  revoke (plaintext shown once), ready-to-paste VDA 5050 bridge / REST /
+  Python / simulator / MCP snippets with the workspace's real values,
+  members and invites, purge. Settings/Config stay deployment-admin only.
+- **Copilot reads as the asker.** `POST /ask` accepts `site`, and the
+  console forwards `X-YF-User-Token` / `X-YF-Demo-Token`; the toolbox
+  sends them to PostgREST so row-level security — not the copilot —
+  decides what an answer may contain. Served from a real host the console
+  now uses same-origin `/ask` instead of a mixed-content `localhost:8001`.
+- **Writers with ingest keys.** `yantrasim --supabase` and `yantrabridge`
+  take `--ingest-key` / `YANTRA_INGEST_KEY`: header on every request, ids
+  namespaced `<site>-…`, `fleet_meta` skipped.
+- **Marketing site redesigned** as a hosted product that is also open
+  source: animated floor-plan hero, real console screenshots, cloud vs
+  self-hosted paths, new `pricing.html` and `integrations.html`, demo /
+  sandbox / sign-up doors everywhere, nav and footer rebuilt on every page.
+- Branding: the console is "Yantrika" (title, header, sign-in modal);
+  release version single-sourced at 0.13.0.
+
 ## v0.12.1 — 2026-09-03
 - **Single-sourced release version**: `core/yantracore/version.py` is now
   the one place the version lives. `yantraops --version`, the `up` banner

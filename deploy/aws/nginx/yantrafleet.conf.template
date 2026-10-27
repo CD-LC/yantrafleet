@@ -51,6 +51,30 @@
 # ---------------------------------------------------------------------------
 limit_req_zone $binary_remote_addr zone=yantra_demo:10m rate=6r/m;
 
+# ---------------------------------------------------------------------------
+# Rate-limit zone for the SIGNED-IN workspace door (/api/workspace/, v0.13).
+#
+# Different threat, different numbers. /api/demo/session is an anonymous POST
+# that forks a process, so it is throttled hard (6r/m). The workspace routes
+# need a valid Supabase JWT and a role, and the console legitimately polls
+# GET /api/workspace/sim/status while a simulated fleet is starting, so:
+#   rate=30r/m      one request per 2 seconds sustained, per client address -
+#                   room for a status poll every few seconds plus the odd
+#                   start/stop click. yantraops adds its own, stricter quota
+#                   on sim/start (10 per 15 minutes per IP) and a separate
+#                   --workspace-max-live ceiling; this is only the cheap outer
+#                   wall that keeps a flood from ever reaching Python.
+#   burst=10 nodelay  a page load fires status + a couple of RPC-adjacent
+#                   calls at once; ten spare slots absorb that, anything past
+#                   it is rejected immediately instead of queued (queued
+#                   requests hold a worker connection - the resource a flood
+#                   is after).
+#   10m             ~160,000 addresses of state, LRU-evicted, so the limiter
+#                   cannot itself be grown into a memory DoS.
+# Same http{}-context placement rule as above: outside server{}.
+# ---------------------------------------------------------------------------
+limit_req_zone $binary_remote_addr zone=yantra_ws:10m rate=30r/m;
+
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -186,6 +210,42 @@ server {
         limit_req_status 429;
         # The door drains and discards the request body without parsing it.
         # Refuse a big one out here rather than reading it into Python.
+        client_max_body_size 4k;
+        proxy_pass http://127.0.0.1:8088;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # -- self-serve workspace door (the SAME yantraops sandbox-serve process,
+    #    loopback 127.0.0.1:8088; routes /api/workspace/sim/start|stop|status)
+    # ANONYMOUS: reachable by anyone, but it does nothing for anyone who is
+    # not a signed-in workspace admin. Why exposing it is safe:
+    #
+    #  * Every route requires the caller's own Supabase JWT in
+    #    `Authorization: Bearer`, and the door FORWARDS THAT JWT TO POSTGREST
+    #    UNCHANGED. It holds no service key and decides nothing about who is
+    #    an admin: the workspace_sim_* RPCs (supabase/0019) do, as that
+    #    person, under row-level security. No JWT -> 401; not an admin -> 403.
+    #  * The ingest key the RPC mints for the simulator goes from the RPC
+    #    reply to the child process's environment on this box. It is never
+    #    in a response body, a log line or argv.
+    #  * The caller can ask for `minutes` and `robots` and nothing else; both
+    #    are clamped, and the site is whatever the RPC says the caller's own
+    #    workspace is - a request cannot name another one.
+    #  * Three ceilings sit behind this: nginx's limit_req below, the door's
+    #    per-IP quota on sim/start (10 per 15 min), and --workspace-max-live
+    #    (counted separately from the marketing sandboxes).
+    #  * OFF unless the operator applied supabase/0019: until then the RPCs do
+    #    not exist and the door answers 503 {reason:"not_enabled"}; if the
+    #    unit is not running, this location answers 502.
+    #  * The door's /healthz stays loopback-only, as for /api/demo/ above.
+    location /api/workspace/ {
+        limit_req zone=yantra_ws burst=10 nodelay;
+        limit_req_status 429;
+        # sim/start reads a tiny JSON body ({minutes, robots}); a JWT rides
+        # in a header. Refuse anything bigger out here.
         client_max_body_size 4k;
         proxy_pass http://127.0.0.1:8088;
         proxy_set_header Host $host;

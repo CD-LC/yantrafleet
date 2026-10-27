@@ -1,0 +1,238 @@
+<!doctype html>
+<!-- Yantrika marketing — Integrations. Plain static HTML; see marketing/README.md.
+     Every snippet here is the same one the console's "Workspace & Connect"
+     view renders with the workspace's real values filled in; the
+     placeholders below are deliberate (<your-project>, yk_…, WS-…). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yantrika Integrations — VDA 5050, REST, Python, MCP, Webhooks</title>
+<link rel="icon" href="/assets/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/assets/brand/icon-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/brand/icon-180.png">
+<meta name="description" content="Connect robots to Yantrika over VDA 5050 v2.1 (MQTT), plain REST, Python, or the bundled simulator; expose the fleet to AI agents over MCP; deliver alerts to Slack, Discord, webhooks and WhatsApp.">
+<link rel="canonical" href="https://yantrika.ai/integrations.html">
+<meta name="theme-color" content="#2563c9">
+<meta property="og:site_name" content="Yantrika">
+<meta property="og:title" content="Yantrika Integrations — VDA 5050, REST, Python, MCP, Webhooks">
+<meta property="og:description" content="Every way data gets into and out of a Yantrika workspace, with copy-paste snippets.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://yantrika.ai/integrations.html">
+<meta property="og:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Yantrika Integrations — VDA 5050, REST, Python, MCP, Webhooks">
+<meta name="twitter:description" content="Every way data gets into and out of a Yantrika workspace, with copy-paste snippets.">
+<meta name="twitter:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
+<link rel="stylesheet" href="assets/styles.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Home","item":"https://yantrika.ai/"},
+ {"@type":"ListItem","position":2,"name":"Integrations","item":"https://yantrika.ai/integrations.html"}]}
+</script>
+</head>
+<body>
+<a class="skiplink" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="index.html"><img class="mark" src="assets/brand/icon-mark.svg" alt="" width="26" height="26"> Yantrika</a>
+    <button class="navtoggle" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+    <nav class="top">
+      <a href="index.html">Home</a>
+      <a href="features.html">Product</a>
+      <a class="on" href="integrations.html">Integrations</a>
+      <a href="pricing.html">Pricing</a>
+      <a href="vda-5050-conformance-test.html">VDA 5050 Test</a>
+      <a href="security.html">Security</a>
+      <a href="docs.html">Docs</a>
+      <a class="ghlink" href="https://github.com/punith-naga/yantrafleet" title="Source on GitHub">GitHub</a>
+      <a class="signin" href="/console/#signin">Sign in</a>
+      <a class="cta" href="/console/#signup">Start free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" style="padding-bottom:20px">
+    <div class="wrap">
+      <p class="kicker">Integrations</p>
+      <h1 style="max-width:22ch">Nothing proprietary on the wire.</h1>
+      <p class="lede">Robots get in over the open standard they already speak, or over plain HTTPS. People get out over the console, webhooks, WhatsApp and MCP. Every writer holds an <strong>ingest key</strong> that can only touch its own workspace — row-level security in Postgres, not a promise in a README.</p>
+      <div class="subnav">
+        <a href="#vda">VDA 5050 bridge</a><a href="#rest">REST</a><a href="#python">Python</a><a href="#sim">Simulator</a><a href="#mcp">MCP / AI agents</a><a href="#out">Alerts out</a><a href="#commands">Commands in</a><a href="#keys">Ingest keys</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="tight" id="vda">
+    <div class="wrap">
+      <h2>VDA 5050 v2.1 over MQTT — the native path</h2>
+      <p class="lede">Point <code>yantrabridge</code> at your broker. It subscribes to <code>state</code>, translates into the shared schema with alert dedup and battery hysteresis, publishes <code>connection</code> and, with <code>--commands</code>, turns approved console commands into <code>instantActions</code> and watches for the robot's <code>actionStates</code> acknowledgement.</p>
+      <div class="snip"><pre><code><span class="cmt"># Python 3.10+ — install the connector straight from the repo</span>
+pip install "git+https://github.com/punith-naga/yantrafleet#subdirectory=core" \
+            "git+https://github.com/punith-naga/yantrafleet#subdirectory=connector"
+
+<span class="cmt"># values from your workspace's "Connect robots" tab</span>
+export SUPABASE_URL=https://&lt;your-project&gt;.supabase.co
+export SUPABASE_KEY=&lt;publishable anon key&gt;
+export YANTRA_INGEST_KEY=yk_…            <span class="cmt"># the secret; create it in the console</span>
+export YANTRA_SITE_ID=WS-xxxxxxxx         <span class="cmt"># your workspace's site id</span>
+
+python -m yantrabridge --mqtt-host broker.yourplant.local --mqtt-port 1883 \
+       --mqtt-topic "uagv/v2/+/+/state" --site WS-xxxxxxxx --commands</code></pre></div>
+      <p>Not sure your vehicles implement the standard correctly? <a href="vda-5050-conformance-test.html">Run the free 52-check conformance tester first.</a> Recorded fleets replay the same way: <code>yantrabridge import --mcap capture.mcap</code> or <code>--jsonl</code>.</p>
+    </div>
+  </section>
+
+  <section class="tight" id="rest">
+    <div class="wrap">
+      <h2>REST — anything that can speak HTTPS</h2>
+      <p class="lede">The backend is PostgREST: one upsert per tick is enough. Row ids are namespaced with the site id because <code>robots.id</code> is a global primary key; the console strips the prefix for display.</p>
+      <div class="snip"><pre><code>curl -X POST "https://&lt;your-project&gt;.supabase.co/rest/v1/robots?on_conflict=id" \
+  -H "apikey: &lt;anon key&gt;" -H "Authorization: Bearer &lt;anon key&gt;" \
+  -H "x-yf-ingest-key: yk_…" \
+  -H "Content-Type: application/json" \
+  -H "Prefer: resolution=merge-duplicates,return=minimal" \
+  -d '[{"id":"WS-xxxxxxxx-AMR-01","vendor":"Acme AMR","status":"active",
+        "battery":82,"pos":[12.5,4.0],"speed":1.1,"health":97,
+        "motor_temp":41,"tasks_done":12,"site_id":"WS-xxxxxxxx"}]'</code></pre></div>
+      <p>Status vocabulary is enforced by a database CHECK: <code>active · idle · charging · paused · estop · degraded · fault</code>. Alerts (<code>alerts</code>), telemetry history (<code>robot_telemetry</code>), incidents and missions are plain tables too — the <a href="/docs/ARCHITECTURE.md">architecture reference</a> lists every column.</p>
+    </div>
+  </section>
+
+  <section class="tight" id="python">
+    <div class="wrap">
+      <h2>Python — ten lines</h2>
+      <div class="snip"><pre><code>import httpx, datetime
+
+BASE = "https://&lt;your-project&gt;.supabase.co/rest/v1"
+H = {"apikey": "&lt;anon key&gt;", "Authorization": "Bearer &lt;anon key&gt;",
+     "x-yf-ingest-key": "yk_…",
+     "Prefer": "resolution=merge-duplicates,return=minimal"}
+SITE = "WS-xxxxxxxx"
+
+def publish(robot_id, **state):
+    row = {"id": f"{SITE}-{robot_id}", "site_id": SITE,
+           "updated_at": datetime.datetime.utcnow().isoformat() + "Z", **state}
+    httpx.post(f"{BASE}/robots", params={"on_conflict": "id"},
+               json=[row], headers=H, timeout=10).raise_for_status()
+
+publish("AMR-01", vendor="Acme AMR", status="active", battery=82,
+        pos=[12.5, 4.0], speed=1.1, health=97, motor_temp=41, tasks_done=12)</code></pre></div>
+    </div>
+  </section>
+
+  <section class="tight" id="sim">
+    <div class="wrap">
+      <h2>Simulator — a fleet without hardware</h2>
+      <p class="lede">Every cloud workspace can start a server-side simulated fleet with one click. The same deterministic simulator also runs from your laptop against your workspace, which is the easiest way to test a notifier rule or an MCP integration before robots are involved.</p>
+      <div class="snip"><pre><code>git clone https://github.com/punith-naga/yantrafleet.git &amp;&amp; cd yantrafleet &amp;&amp; ./install.sh
+export SUPABASE_URL=https://&lt;your-project&gt;.supabase.co SUPABASE_KEY=&lt;anon key&gt;
+export YANTRA_INGEST_KEY=yk_…
+.venv/bin/python -m yantrasim --supabase --site WS-xxxxxxxx --fleet-size 10</code></pre></div>
+    </div>
+  </section>
+
+  <section class="tight" id="mcp">
+    <div class="wrap">
+      <h2>MCP — your fleet as tools for AI agents</h2>
+      <p class="lede">Sarathi's evidence-grounded toolbox — <code>fleet_summary</code>, <code>query_robots</code>, <code>query_alerts</code>, <code>query_incidents</code>, <code>query_commands</code>, <code>robot_history</code> — is exposed over the Model Context Protocol for Claude Desktop and any other MCP client. Every result carries a <code>source_id</code> citation key.</p>
+      <div class="snip"><pre><code>{
+  "mcpServers": {
+    "yantrika": {
+      "command": "python", "args": ["-m", "sarathi.mcp_server"],
+      "env": {"SUPABASE_URL": "https://&lt;your-project&gt;.supabase.co",
+              "SUPABASE_KEY": "&lt;anon key&gt;",
+              "YANTRA_SITE_ID": "WS-xxxxxxxx"}
+    }
+  }
+}</code></pre></div>
+      <p>The hosted copilot behind <code>POST /ask</code> reads <em>as the person asking</em>: the console forwards your session, and row-level security decides what the answer may contain.</p>
+    </div>
+  </section>
+
+  <section class="tight" id="out">
+    <div class="wrap">
+      <h2>Alerts out — Slack, Discord, webhooks, WhatsApp</h2>
+      <p class="lede">The notifier polls unacknowledged critical and serious alerts and open incidents, dedups, groups by severity and fans out with retry, backoff and a circuit breaker per channel. Webhook posts are Slack Block Kit / Discord embed shaped and HMAC-SHA256 signed (<code>X-Yantra-Signature</code>) when a secret is set. WhatsApp goes through Twilio, and inbound WhatsApp replies can acknowledge, assign and approve — re-checking the sender's mapped role server-side.</p>
+      <p>On a self-hosted deployment an admin rotates all of these live from the console's Settings panel; per-workspace routing on Yantrika Cloud is on the <a href="pricing.html">post-beta list</a>.</p>
+    </div>
+  </section>
+
+  <section class="tight" id="commands">
+    <div class="wrap">
+      <h2>Commands in — the human-in-the-loop gate</h2>
+      <p class="lede">Pause, resume, send-to-charge and e-stop from the console insert a <code>pending</code> row. A manager approves or rejects through the <code>decide_command</code> function, which enforces the role in the database. The bridge then publishes the VDA 5050 <code>instantAction</code> and marks the command <code>executed</code> or <code>failed</code> with the robot's own reason. The whole trail is in the Audit view.</p>
+    </div>
+  </section>
+
+  <section class="tight" id="keys">
+    <div class="wrap">
+      <div class="callout">
+        <p class="kicker">Ingest keys</p>
+        <h2 style="margin-bottom:8px">One secret per writer, pinned to one workspace.</h2>
+        <p>A key looks like <code>yk_</code> + 64 hex characters. Only its SHA-256 hash is stored; the plaintext is shown once when you create it. On every request Postgres resolves the header <code>x-yf-ingest-key</code> to exactly one site id — or to NULL — and every policy on every fleet table is <code>site_id = yf_ingest_site()</code>. A missing, revoked, expired or guessed key sees nothing and writes nothing; no key can touch another workspace, <code>fleet_meta</code>, settings or roles. Create up to ten per workspace and revoke any of them instantly from the console. Full contract: <a href="/docs/WORKSPACES.md">docs/WORKSPACES.md</a>.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band grad">
+    <div class="wrap" style="text-align:center">
+      <h2>Get an ingest key in under a minute.</h2>
+      <div class="actions" style="justify-content:center;margin-top:22px">
+        <a class="btn primary" href="/console/#signup">Create free workspace</a>
+        <a class="btn secondary" href="/console/#demo">See the demo (no login)</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <div class="fbrand">Yantrika</div>
+        <p style="color:var(--muted);font-size:14px;max-width:38ch">Fleet operations for multi-vendor AMR fleets. Open source under MIT; hosted free while in beta.</p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="features.html">Features</a></li>
+          <li><a href="integrations.html">Integrations</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="security.html">Security</a></li>
+          <li><a href="changelog.html">Changelog</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Use it</h4>
+        <ul>
+          <li><a href="/console/#demo">Demo (no login)</a></li>
+          <li><a href="/console/#signup">Create free workspace</a></li>
+          <li><a href="/console/#signin">Sign in</a></li>
+          <li><a href="/academy/">Operator academy</a></li>
+          <li><a href="vda-5050-conformance-test.html">VDA 5050 conformance test</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Open source</h4>
+        <ul>
+          <li><a href="docs.html">Documentation</a></li>
+          <li><a href="https://github.com/punith-naga/yantrafleet">GitHub repository</a></li>
+          <li><a href="get-involved.html">Get involved / Issues</a></li>
+          <li><a href="about.html">About</a></li>
+          <li><a href="https://github.com/punith-naga/yantrafleet/blob/main/LICENSE">License (MIT)</a></li>
+          <li><a href="search.html">Search this site</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine">Yantrika is open source under the MIT license. This site sets no cookies and runs no trackers; the console stores your session in your own browser.</p>
+  </div>
+</footer>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

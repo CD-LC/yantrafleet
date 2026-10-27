@@ -1,0 +1,185 @@
+<!doctype html>
+<!-- Yantrika marketing — Pricing. Plain static HTML; see marketing/README.md.
+     Honest by construction: Yantrika Cloud is free while in beta, the
+     software is MIT, and the two paid rows describe what a workspace plan
+     WOULD gate once beta ends — every row is sourced from docs/WORKSPACES.md
+     (plan column: free | team | enterprise) and nothing is sold here. -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yantrika Pricing — Free cloud workspaces, MIT-licensed self-hosting</title>
+<link rel="icon" href="/assets/brand/favicon.ico" sizes="any">
+<link rel="icon" href="/assets/brand/icon-mark.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/brand/icon-180.png">
+<meta name="description" content="Yantrika Cloud is free while in beta: your own workspace, ingest keys, simulated fleet, team roles. Self-hosting is free forever under MIT. No feature is held back behind a sales call.">
+<link rel="canonical" href="https://yantrika.ai/pricing.html">
+<meta name="theme-color" content="#2563c9">
+<meta property="og:site_name" content="Yantrika">
+<meta property="og:title" content="Yantrika Pricing — free cloud beta, MIT self-hosting">
+<meta property="og:description" content="Hosted workspaces free while in beta; the same platform self-hosted under MIT. Every feature in every tier.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://yantrika.ai/pricing.html">
+<meta property="og:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Yantrika Pricing — free cloud beta, MIT self-hosting">
+<meta name="twitter:description" content="Hosted workspaces free while in beta; the same platform self-hosted under MIT.">
+<meta name="twitter:image" content="https://yantrika.ai/assets/og-yantrafleet.png">
+<link rel="stylesheet" href="assets/styles.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Home","item":"https://yantrika.ai/"},
+ {"@type":"ListItem","position":2,"name":"Pricing","item":"https://yantrika.ai/pricing.html"}]}
+</script>
+</head>
+<body>
+<a class="skiplink" href="#main">Skip to content</a>
+
+<header class="site">
+  <div class="wrap bar">
+    <a class="brand" href="index.html"><img class="mark" src="assets/brand/icon-mark.svg" alt="" width="26" height="26"> Yantrika</a>
+    <button class="navtoggle" aria-expanded="false" aria-label="Toggle navigation">☰</button>
+    <nav class="top">
+      <a href="index.html">Home</a>
+      <a href="features.html">Product</a>
+      <a href="integrations.html">Integrations</a>
+      <a class="on" href="pricing.html">Pricing</a>
+      <a href="vda-5050-conformance-test.html">VDA 5050 Test</a>
+      <a href="security.html">Security</a>
+      <a href="docs.html">Docs</a>
+      <a class="ghlink" href="https://github.com/punith-naga/yantrafleet" title="Source on GitHub">GitHub</a>
+      <a class="signin" href="/console/#signin">Sign in</a>
+      <a class="cta" href="/console/#signup">Start free</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero" style="padding-bottom:20px">
+    <div class="wrap">
+      <p class="kicker">Pricing</p>
+      <h1 style="max-width:22ch">Free while in beta. Free forever if you host it.</h1>
+      <p class="lede">There is no feature held back behind a sales call: every capability on this site is in the open-source code and in every cloud workspace. The plans below exist so you know what will change when the beta ends — and what will not.</p>
+    </div>
+  </section>
+
+  <section class="tight">
+    <div class="wrap">
+      <div class="plans">
+        <div class="plan hi">
+          <h3>Cloud — Free <span class="badge-beta">beta</span></h3>
+          <div class="price">$0<small> / workspace</small></div>
+          <p class="who">For evaluations, pilots and teams who want a fleet on screen today.</p>
+          <ul>
+            <li>Your own workspace and site id, created on signup</li>
+            <li>Admin role, unlimited members across 4 roles</li>
+            <li>Up to 10 ingest keys; VDA 5050 bridge, REST, Python, MCP</li>
+            <li>One-click simulated fleet (8 robots, 4 h, restartable)</li>
+            <li>Incidents, predictive maintenance, notifier, Sarathi copilot</li>
+            <li>Operator academy and certification</li>
+            <li>Row-level isolation from every other workspace</li>
+          </ul>
+          <a class="btn primary" href="/console/#signup">Create free workspace</a>
+        </div>
+        <div class="plan">
+          <h3>Cloud — Team</h3>
+          <div class="price">Not yet<small> · after beta</small></div>
+          <p class="who">What a paid workspace is planned to add once the beta ends. Nothing is charged today.</p>
+          <ul>
+            <li>Everything in Free, no changes to isolation or roles</li>
+            <li>Longer telemetry retention and higher ingest rates</li>
+            <li>Longer-running and larger simulated fleets</li>
+            <li>LLM-backed copilot tiers with a hosted key</li>
+            <li>Alert routing per workspace (Slack / Discord / WhatsApp)</li>
+            <li class="no">No feature that exists only in a paid tier</li>
+          </ul>
+          <a class="btn secondary" href="get-involved.html">Tell us what you need →</a>
+        </div>
+        <div class="plan">
+          <h3>Self-hosted</h3>
+          <div class="price">$0<small> · MIT, forever</small></div>
+          <p class="who">For plants that keep their data in-house, and for anyone who wants to read the code they run.</p>
+          <ul>
+            <li>The complete platform — console, services, academy, tester</li>
+            <li>Loopback mode with no cloud account at all</li>
+            <li>Your Supabase or Postgres; scripted AWS and Azure kits</li>
+            <li>Self-serve workspaces on your own deployment (0019)</li>
+            <li>Demo → hardened → RBAC posture, your choice</li>
+            <li>Security audit command and compliance mappings</li>
+          </ul>
+          <a class="btn secondary" href="https://github.com/punith-naga/yantrafleet">Get the source</a>
+        </div>
+      </div>
+      <p style="margin-top:18px;color:var(--muted);font-size:14px">Enterprise needs — single sign-on, a dedicated project, support commitments — are conversations, not a tier: <a href="get-involved.html">open an issue or discussion</a> and say what you are running.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap" style="max-width:780px">
+      <p class="kicker">Questions people ask before signing up</p>
+      <details class="faq" open><summary>What happens to my workspace when the beta ends?</summary><p>It stays yours. The Free tier keeps its name and its contents; the Team tier is additive. If limits are introduced for new workspaces, existing ones get notice inside the console first.</p></details>
+      <details class="faq"><summary>Is my fleet data visible to other workspaces, or to you?</summary><p>Other workspaces: no — every fleet table is protected by Postgres row-level security pinned to your site id, for people and for machines alike. The operators of yantrika.ai administer the database and can see rows for support and abuse prevention; nothing is sold, shared or used to train models.</p></details>
+      <details class="faq"><summary>Can I move from cloud to self-hosted later?</summary><p>Yes. It is the same schema and the same code. Export your rows over the REST API (or ask us for a dump), apply the migrations to your own project with <code>yantraops migrate</code>, and point your bridges at the new URL with a new ingest key.</p></details>
+      <details class="faq"><summary>Do I need a credit card?</summary><p>No. The console asks for an email and a password, nothing else.</p></details>
+    </div>
+  </section>
+
+  <section class="band grad">
+    <div class="wrap" style="text-align:center">
+      <h2>Start with the demo. Keep going with a workspace.</h2>
+      <div class="actions" style="justify-content:center;margin-top:22px">
+        <a class="btn primary" href="/console/#signup">Create free workspace</a>
+        <a class="btn secondary" href="/console/#demo">See the demo (no login)</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <div class="fbrand">Yantrika</div>
+        <p style="color:var(--muted);font-size:14px;max-width:38ch">Fleet operations for multi-vendor AMR fleets. Open source under MIT; hosted free while in beta.</p>
+      </div>
+      <div>
+        <h4>Product</h4>
+        <ul>
+          <li><a href="features.html">Features</a></li>
+          <li><a href="integrations.html">Integrations</a></li>
+          <li><a href="pricing.html">Pricing</a></li>
+          <li><a href="security.html">Security</a></li>
+          <li><a href="changelog.html">Changelog</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Use it</h4>
+        <ul>
+          <li><a href="/console/#demo">Demo (no login)</a></li>
+          <li><a href="/console/#signup">Create free workspace</a></li>
+          <li><a href="/console/#signin">Sign in</a></li>
+          <li><a href="/academy/">Operator academy</a></li>
+          <li><a href="vda-5050-conformance-test.html">VDA 5050 conformance test</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Open source</h4>
+        <ul>
+          <li><a href="docs.html">Documentation</a></li>
+          <li><a href="https://github.com/punith-naga/yantrafleet">GitHub repository</a></li>
+          <li><a href="get-involved.html">Get involved / Issues</a></li>
+          <li><a href="about.html">About</a></li>
+          <li><a href="https://github.com/punith-naga/yantrafleet/blob/main/LICENSE">License (MIT)</a></li>
+          <li><a href="search.html">Search this site</a></li>
+        </ul>
+      </div>
+    </div>
+    <p class="fine">Yantrika is open source under the MIT license. This site sets no cookies and runs no trackers; the console stores your session in your own browser.</p>
+  </div>
+</footer>
+
+<script src="assets/main.js"></script>
+</body>
+</html>

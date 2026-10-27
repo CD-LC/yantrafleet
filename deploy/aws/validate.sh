@@ -132,6 +132,34 @@ echo "$RENDERED" | grep -qF '$binary_remote_addr' \
     && pass "nginx variable \$binary_remote_addr preserved through envsubst" \
     || fail "nginx variable \$binary_remote_addr was clobbered"
 
+# -- self-serve workspace door (v0.13) --------------------------------------
+# The console's "Start a simulated fleet" button POSTs to /api/workspace/sim/*.
+# Same upstream as /api/demo/ (one yantraops sandbox-serve process), but its
+# own, looser rate-limit zone: a signed-in admin polls status, a stranger
+# mints sandboxes.
+echo "$RENDERED" | grep -q 'location /api/workspace/ {' \
+    && pass "nginx location /api/workspace/ present (the console's simulated-fleet buttons)" \
+    || fail "nginx location /api/workspace/ MISSING -- the console's Start-simulated-fleet button would 404"
+echo "$RENDERED" | grep -A30 'location /api/workspace/ {' | grep -q 'proxy_pass http://127.0.0.1:8088;' \
+    && pass "/api/workspace/ proxies to the same door on 127.0.0.1:8088" \
+    || fail "/api/workspace/ does not proxy to 127.0.0.1:8088"
+echo "$RENDERED" | grep -A30 'location /api/workspace/ {' \
+    | grep -q 'proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;' \
+    && pass "/api/workspace/ forwards X-Forwarded-For (per-IP quota on sim/start)" \
+    || fail "/api/workspace/ does not forward X-Forwarded-For"
+echo "$RENDERED" | grep -q 'limit_req_zone \$binary_remote_addr zone=yantra_ws:10m rate=30r/m;' \
+    && pass "limit_req_zone yantra_ws declared (30r/m)" \
+    || fail "limit_req_zone yantra_ws (30r/m) MISSING"
+echo "$RENDERED" | grep -A30 'location /api/workspace/ {' | grep -qE '^\s+limit_req zone=yantra_ws burst=10 nodelay;' \
+    && pass "location /api/workspace/ applies limit_req zone=yantra_ws burst=10 nodelay" \
+    || fail "limit_req zone=yantra_ws burst=10 nodelay not applied to /api/workspace/"
+grep -q -- '--workspace-max-live 12' "$HERE/systemd/yantra-sandbox.service" \
+    && pass "yantra-sandbox ships --workspace-max-live 12" \
+    || fail "yantra-sandbox is missing --workspace-max-live 12"
+grep -q 'ROUTE_WS_SIM_START = "/api/workspace/sim/start"' "$REPO_ROOT/ops/yantraops/sandbox_http.py" \
+    && pass "sandbox_http.py still serves /api/workspace/sim/start (matches the nginx block + the console)" \
+    || fail "sandbox_http.py's workspace routes moved -- nginx and the console point at nothing"
+
 # /healthz must NOT be public: it carries operational counters, and /health
 # on this box already belongs to the sarathi copilot.
 echo "$RENDERED" | grep -q 'location /healthz\|proxy_pass http://127.0.0.1:8088/healthz' \
@@ -148,11 +176,16 @@ echo "$RENDERED" | grep -q 'location /healthz\|proxy_pass http://127.0.0.1:8088/
 # deleting one route's rationale cannot be papered over by its neighbour's.
 ANON_ROUTES=('location / {' 'location /console/ {' 'location /academy/ {'
              'location /docs/ {' 'location ~ ^/docs/.*\.md$ {'
-             'location /api/demo/ {' 'location /ask {' 'location /health {')
+             'location /api/demo/ {' 'location /api/workspace/ {'
+             'location /ask {' 'location /health {')
 for anon in "${ANON_ROUTES[@]}"; do
-    if echo "$RENDERED" | awk -v want="$anon" '
+    # The pattern goes in via ENVIRON, not `awk -v`: -v processes backslash
+    # escapes (gawk/BSD awk turn `\.` into `.`), which silently broke the
+    # match for the regex location `~ ^/docs/.*\.md$`. mawk happened to keep
+    # the backslash, so the check passed on one distro and failed elsewhere.
+    if echo "$RENDERED" | WANT="$anon" awk '
             /# ANONYMOUS/ { last = NR }
-            index($0, want) && !seen { seen = 1; ok = (last > 0 && NR - last <= 50) }
+            index($0, ENVIRON["WANT"]) && !seen { seen = 1; ok = (last > 0 && NR - last <= 50) }
             END { exit !ok }'; then
         pass "anonymous-route rationale documented above \"$anon\""
     else

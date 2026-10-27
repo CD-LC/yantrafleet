@@ -82,7 +82,7 @@ def test_bridge_endpoint_and_timeout(script: str) -> None:
     assert "fetch(this.SARATHI_URL" in body
     assert "method:'POST'" in body
     assert "signal:c.signal" in body
-    assert "JSON.stringify({question:q})" in body
+    assert "JSON.stringify(body)" in body and "question:q" in body  # v0.13: body also carries the tenant site
 
 
 def test_bridge_renders_answer_evidence_tier(script: str) -> None:

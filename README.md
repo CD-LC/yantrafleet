@@ -1,6 +1,6 @@
 # Yantrika
 
-**v0.12.1** · 10 test suites, 525 tests, all green · MIT license
+**v0.13.0** · 11 test suites, 700+ tests, all green · MIT license · hosted at [yantrika.ai](https://yantrika.ai)
 
 An end-to-end fleet-operations platform for multi-vendor AMR (autonomous
 mobile robot) fleets — the operations layer for Physical AI. Robots (or the
@@ -8,6 +8,13 @@ bundled simulator) speak VDA 5050 v2.1 over MQTT; a connector translates that
 into a shared Supabase schema; on top sit a live web console with a human
 approval gate, automatic incidents, predictive maintenance, real alert
 delivery, and an AI copilot grounded in your fleet's actual data.
+
+**Two ways to use it, one codebase:**
+
+| | |
+|---|---|
+| **Yantrika Cloud** (hosted, free while in beta) | [See the demo — no login](https://yantrika.ai/console/#demo) · [Create a free workspace](https://yantrika.ai/console/#signup) · [Start a throwaway live sandbox](https://yantrika.ai/#demo-live). Signing up provisions a private workspace (your own `site_id`, admin role, ingest keys to connect robots over VDA 5050 or REST, a one-click simulated fleet, role-scoped seats for your team). Contract: [docs/WORKSPACES.md](docs/WORKSPACES.md). |
+| **Self-hosted** (MIT, forever) | The quickstart below runs the whole platform on your laptop with no cloud account; `deploy/` has scripted AWS and Azure kits; `supabase/0019_workspaces.sql` turns self-serve workspaces on for your own deployment. |
 
 ## Quickstart — 3 commands, zero config
 

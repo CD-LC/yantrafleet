@@ -398,6 +398,52 @@ select public.demo_reap_expired(0);                        -- purge what is left
 or run 0009's commented ROLLBACK block to remove the anon grants and
 policies entirely.
 
+## Self-serve workspaces and ingest keys (`0019_workspaces.sql`)
+
+`0019` lets a visitor sign up and receive a workspace (`WS-<8 hex>`) with
+the `admin` role in it, plus **ingest keys** so their robots can write to
+it. It is the second credential this platform hands to a machine on the
+open internet, built on exactly the pattern 0009 uses for sandbox tokens
+(read its THREAT MODEL too).
+
+- **An ingest key is a bearer secret.** `yk_` + 64 hex (two v4 UUIDs of
+  entropy), sent as `x-yf-ingest-key`. Whoever holds it can read, insert
+  and update the seven fleet tables **of that one workspace** and nothing
+  else - that is the whole blast radius of a leak.
+- **Hashed at rest.** Only the SHA-256 hex digest is stored
+  (`ingest_keys.key_hash`); the plaintext is returned once, by
+  `workspace_create_ingest_key`, and shown once. A database dump does not
+  yield working keys, and `my_workspace()` lists only a 12-character
+  prefix for display.
+- **Site-pinned RLS.** `yf_ingest_site()` resolves the header to a single
+  `WS-*` site; the `ingest_read` / `ingest_insert` / `ingest_update`
+  policies are `site_id = yf_ingest_site()` in both USING and WITH CHECK,
+  so a key can neither read, write nor *move a row to* another site, and
+  `on conflict do update` onto another tenant's primary key is refused.
+  A legacy site (`BLR-DC1`) or a `DEMO-*` sandbox cannot be addressed by a
+  key. No DELETE exists for the key (policy *and* privilege); `fleet_meta`,
+  `user_roles`, `workspaces` and the other 0019 tables are unreachable.
+  Writers prefix ids with `<site>-` because `robots.id` is a global
+  primary key - a UX measure, not the boundary.
+- **Revocable, expiring.** `workspace_revoke_ingest_key` takes effect on
+  the very next request (the policy re-resolves the key per statement).
+  The simulated-fleet key is a short-lived `sim`-kind key that
+  `workspace_sim_stop` revokes; the driver sees the 401/403 and exits.
+- **Workspace admins are not platform admins.** 0007 makes an `admin` role
+  at *any* site global. Self-serve sign-up would hand every stranger that
+  role, so 0019 redefines `yf_has_role` to confine an admin role held at a
+  `WS-*` site to that workspace; an admin at a legacy site (your own
+  staff) is unchanged and still sees everything.
+- **The door holds no privilege.** `/api/workspace/` (yantraops
+  `sandbox-serve`) forwards the caller's own JWT to PostgREST; the RPCs
+  decide who is an admin. The key it mints for the simulator travels
+  RPC reply -> child environment, never argv, a log or a response body.
+
+Residual risks: row-count abuse inside one's own workspace (an admin can
+wipe their fleet with `workspace_purge_fleet`, nobody else's), open
+sign-up (rate-limit it in Supabase Auth), and a leaked key until it is
+revoked.
+
 ## EC2 (or any Linux host) notes
 
 - Keep secrets out of shell history and unit files. Put them in

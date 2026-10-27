@@ -45,6 +45,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--seed", type=int, default=42, help="RNG seed (default: 42)")
     p.add_argument("--url", default=None, help="Supabase URL (or env SUPABASE_URL)")
     p.add_argument("--key", default=None, help="Supabase anon key (or env SUPABASE_KEY)")
+    p.add_argument("--site", default=None, metavar="SITE_ID",
+                   help="site_id to stamp on every row and to poll commands "
+                        "for (or env YANTRA_SITE_ID; default BLR-DC1). With "
+                        "--ingest-key this must be the workspace's WS-<hex> id")
+    p.add_argument("--ingest-key", default=None, metavar="yk_...",
+                   help="write as a self-serve workspace's robot connector "
+                        "(supabase/0019): sends x-yf-ingest-key on every "
+                        "request, namespaces ids with '<site>-', skips "
+                        "fleet_meta (or env YANTRA_INGEST_KEY). Prefer the env "
+                        "var — argv is visible in `ps`")
     p.add_argument("--broker", default="localhost", help="MQTT broker host")
     p.add_argument("--port", type=int, default=1883, help="MQTT broker port")
     p.add_argument("--verbose", action="store_true", help="debug logging / full JSON")
@@ -59,7 +69,8 @@ def make_transport(args: argparse.Namespace, sim: FleetSim,
     if args.stdout:
         return StdoutTransport(verbose=args.verbose)
     return SupabaseTransport(url=args.url, key=args.key, writer_id=sim.writer_id,
-                             client=client)
+                             client=client, site=args.site,
+                             ingest_key=args.ingest_key)
 
 
 def main(argv: list[str] | None = None, client=None) -> int:
@@ -77,7 +88,13 @@ def main(argv: list[str] | None = None, client=None) -> int:
     if not args.verbose:  # httpx request spam is DEBUG-grade for a demo
         logging.getLogger("httpx").setLevel(logging.WARNING)
     sim = FleetSim(seed=args.seed)
-    transport = make_transport(args, sim, client=client)
+    try:
+        transport = make_transport(args, sim, client=client)
+    except ValueError as exc:
+        # An ingest key that cannot work (malformed, or paired with a
+        # non-workspace site) is refused at startup, not per tick.
+        print(f"yantrasim: {exc}", file=sys.stderr)
+        return 2
 
     # v0.18: SIM_INTERVAL from public.app_config when --interval wasn't
     # explicitly passed — Supabase mode only (mqtt/stdout have no
@@ -87,9 +104,13 @@ def main(argv: list[str] | None = None, client=None) -> int:
     # same degrade-quietly behavior — so an admin-console site change
     # reaches yantracore.site_id() (used when stamping rows) without a
     # restart.
+    # Workspace mode (an ingest key) polls neither: app_config is not
+    # readable with a key (0019 grants anon nothing outside the seven
+    # fleet tables), and the site is pinned to the key's workspace anyway.
     config: TablePoller | None = None
     site_sync_started = False
-    if not args.mqtt and not args.stdout:
+    workspace_mode = getattr(transport, "ingest_key", None) is not None
+    if not args.mqtt and not args.stdout and not workspace_mode:
         url, key = resolve_supabase_config(args.url, args.key)
         config = TablePoller(url, key, table="app_config", keys=CONFIG_KEYS,
                              client=client)

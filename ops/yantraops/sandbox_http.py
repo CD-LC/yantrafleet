@@ -46,6 +46,31 @@ hostile visitor. Five refusals, each independent:
 The token appears in exactly one place: inside the ``console_url`` of
 the reply to the request that minted it. It is never logged (the access
 log records method, path and status only) and never stored.
+
+THE WORKSPACE ROUTES (0019, docs/WORKSPACES.md section 4)
+---------------------------------------------------------
+The same process also answers three routes for a signed-in person's own
+workspace — the "Start a simulated fleet" button in the console::
+
+    POST /api/workspace/sim/start    {minutes?, robots?}
+    POST /api/workspace/sim/stop
+    GET  /api/workspace/sim/status
+
+Every one requires the person's Supabase JWT in ``Authorization: Bearer``
+and FORWARDS IT TO POSTGREST UNCHANGED (``apikey`` stays the anon key).
+That one decision is what keeps this door privilege-free: it never holds
+a service key and never decides who is an admin — the ``workspace_sim_*``
+RPCs do, as that person, under 0007's ``yf_has_role``. What the door adds
+is purely local: it forks ``sandbox-drive --auth ingest`` with the key the
+RPC minted (through the environment, never argv), records the pid in the
+registry with ``kind:'workspace'`` so ``sim/stop`` can SIGTERM it and the
+sweeper can reap it, and enforces its own two walls — a per-IP quota on
+``sim/start`` and ``--workspace-max-live``, counted separately from the
+sandbox ceiling so a busy marketing page and a busy workspace never lock
+each other out. The body of ``sim/start`` IS read (``minutes``/``robots``),
+unlike the demo mint, because here the caller is an authenticated admin
+of the very workspace the values apply to, and the RPC clamps them again
+server-side regardless.
 """
 from __future__ import annotations
 
@@ -58,10 +83,12 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-from .sandbox import (EXIT_ERROR, EXIT_OK, SandboxAPI, SandboxCeiling,
-                      SandboxDisabled, SandboxError, SandboxRegistry,
+from .sandbox import (AUTH_INGEST, EXIT_ERROR, EXIT_OK, KIND_DEMO,
+                      KIND_WORKSPACE, DriverSession, SandboxAPI,
+                      SandboxCeiling, SandboxDisabled, SandboxError,
+                      SandboxRecord, SandboxRegistry, _iso, _now,
                       _spawn_driver, mint_sandbox, resolve_console_base,
-                      resolve_max_live)
+                      resolve_max_live, resolve_workspace_max_live)
 
 #: Route names, in one place so the systemd unit, the nginx block and the
 #: marketing button can all be checked against the same strings.
@@ -69,12 +96,31 @@ ROUTE_MINT = "/api/demo/session"
 ROUTE_LIMITS = "/api/demo/limits"
 ROUTE_HEALTH = "/healthz"
 
+#: 0019 workspace routes (docs/WORKSPACES.md section 4). nginx proxies the
+#: whole ``/api/workspace/`` prefix to the same upstream as ``/api/demo/``.
+ROUTE_WS_PREFIX = "/api/workspace/"
+ROUTE_WS_SIM_START = "/api/workspace/sim/start"
+ROUTE_WS_SIM_STOP = "/api/workspace/sim/stop"
+ROUTE_WS_SIM_STATUS = "/api/workspace/sim/status"
+
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8088
 
 #: Per-IP quota: this many mints per this many seconds.
 DEFAULT_RATE = 3
 DEFAULT_RATE_WINDOW_S = 900.0
+
+#: Per-IP quota on ``sim/start``: 10 per 15 minutes (the spec's number).
+#: Looser than the demo mint because the caller has already proven an
+#: account and an admin role, tighter than "unlimited" because every start
+#: forks a process.
+DEFAULT_WORKSPACE_RATE = 10
+DEFAULT_WORKSPACE_RATE_WINDOW_S = 900.0
+
+#: The spec's clamps for a simulated fleet, applied here before the RPC
+#: applies them again — the reply the caller sees is then never a surprise.
+WS_MINUTES_MIN, WS_MINUTES_MAX, WS_MINUTES_DEFAULT = 5, 1440, 240
+WS_ROBOTS_MIN, WS_ROBOTS_MAX, WS_ROBOTS_DEFAULT = 2, 20, 8
 
 #: How many mints may be in flight at once. Each one forks a simulator, so
 #: this is a CPU bound, not a politeness bound.
@@ -192,6 +238,12 @@ class ServeConfig:
     trusted_proxy_hops: int = 0
     allow_origin: str = "*"
     quiet: bool = False
+    #: 0019: ceiling on live workspace simulators on this box (None = env
+    #: YANTRAOPS_WORKSPACE_MAX, else DEFAULT_WORKSPACE_MAX_LIVE), and the
+    #: per-IP quota on the start route.
+    workspace_max_live: int | None = None
+    workspace_rate: int = DEFAULT_WORKSPACE_RATE
+    workspace_rate_window_s: float = DEFAULT_WORKSPACE_RATE_WINDOW_S
     #: Injectable seam: a spawn that does not fork (tests, dry runs).
     spawn: Callable[..., int] = _spawn_driver
     _clock: Callable[[], float] = field(default=time.monotonic, repr=False)
@@ -222,18 +274,39 @@ class SandboxService:
         #: Counters for /healthz — operational, never per-visitor.
         self.minted = 0
         self.refused = 0
+        #: 0019: the workspace routes' own quota, lock and counters. The
+        #: lock serialises the ceiling check + registry write exactly as
+        #: _mint_lock does for sandboxes (same read-modify-write on one
+        #: JSON file; it is a separate lock only so a slow sandbox mint
+        #: never stalls a workspace start, and vice versa).
+        self.ws_limiter = RateLimiter(config.workspace_rate,
+                                      config.workspace_rate_window_s,
+                                      clock=config._clock)
+        self._ws_lock = threading.Lock()
+        self.workspace_started = 0
+        self.workspace_refused = 0
 
     # -- plumbing ---------------------------------------------------------
 
-    def _api(self) -> SandboxAPI:
-        return SandboxAPI(self.config.base_url, self.config.key)
+    def _api(self, user_jwt: str | None = None) -> SandboxAPI:
+        return SandboxAPI(self.config.base_url, self.config.key,
+                          user_jwt=user_jwt)
 
     @property
     def ceiling(self) -> int:
         return resolve_max_live(self.config.max_live)
 
+    @property
+    def workspace_ceiling(self) -> int:
+        return resolve_workspace_max_live(self.config.workspace_max_live)
+
     def live_count(self) -> int:
-        return self.registry.live_count()
+        """Live marketing sandboxes — workspace simulators are counted
+        separately (:meth:`workspace_live_count`) and never hold a slot."""
+        return self.registry.live_count(kind=KIND_DEMO)
+
+    def workspace_live_count(self) -> int:
+        return self.registry.live_count(kind=KIND_WORKSPACE)
 
     # -- limits -----------------------------------------------------------
 
@@ -348,7 +421,208 @@ class SandboxService:
     def health(self) -> dict[str, Any]:
         return {"ok": True, "service": "yantra-sandbox",
                 "live": self.live_count(), "max_live": self.ceiling,
-                "minted": self.minted, "refused": self.refused}
+                "minted": self.minted, "refused": self.refused,
+                "workspace_live": self.workspace_live_count(),
+                "workspace_max_live": self.workspace_ceiling,
+                "workspace_started": self.workspace_started,
+                "workspace_refused": self.workspace_refused}
+
+    # -- workspace simulated fleets (0019) ----------------------------------
+
+    @staticmethod
+    def _rpc_failure(exc: SandboxError, fn: str) -> tuple[int, dict[str, Any]]:
+        """Map a failed RPC call onto the door's status codes.
+
+        * ``PGRST202`` (PostgREST: "could not find the function") means
+          0019 was never applied here — 503 ``not_enabled``, so the console
+          can hide the feature rather than show an error.
+        * 401 from PostgREST is an invalid/expired JWT — passed through.
+        * anything else is the backend misbehaving — 502.
+        """
+        if exc.code == "PGRST202" or (exc.status == 404 and fn in exc.message):
+            return 503, {"ok": False, "reason": "not_enabled",
+                         "error": ("Self-serve workspaces are not enabled on "
+                                   "this deployment (supabase/0019 not applied)."),
+                         "detail": exc.message, "retry_after": 3600}
+        if exc.status == 401:
+            return 401, {"ok": False, "reason": "unauthenticated",
+                         "error": "Your session is invalid or expired — sign in again.",
+                         "detail": exc.message}
+        return 502, {"ok": False, "reason": "error",
+                     "error": "The workspace backend did not answer.",
+                     "detail": exc.message}
+
+    @staticmethod
+    def _rpc_refusal(payload: Any) -> tuple[int, dict[str, Any]] | None:
+        """``{ok:false, reason}`` from the RPC -> (status, body), else None.
+
+        Every workspace RPC answers HTTP 200 and says no in the envelope;
+        the door translates: ``unauthenticated`` is 401, everything else
+        (``forbidden``, ``no_workspace``, ``not_workspace``, ``owner`` …) is
+        403 with the reason passed through untouched.
+        """
+        if not isinstance(payload, dict):
+            return 502, {"ok": False, "reason": "error",
+                         "error": "The workspace backend answered with an "
+                                  "unexpected shape.", "detail": repr(payload)[:200]}
+        if payload.get("ok"):
+            return None
+        reason = str(payload.get("reason") or "forbidden")
+        status = 401 if reason == "unauthenticated" else 403
+        return status, {"ok": False, "reason": reason,
+                        "error": str(payload.get("error") or
+                                     "The workspace refused this action.")}
+
+    @staticmethod
+    def _clamp(value: Any, lo: int, hi: int, default: int) -> int:
+        try:
+            n = int(value)
+        except (TypeError, ValueError):
+            return default
+        return max(lo, min(hi, n))
+
+    def workspace_sim_start(self, jwt: str | None, client_ip: str,
+                            body: Any) -> tuple[int, dict[str, Any]]:
+        """``POST /api/workspace/sim/start`` -> (status, body). Never raises.
+
+        Order of refusals, cheapest first: no JWT (401), per-IP quota
+        (429 rate_limited), local ceiling (429 ceiling), then the RPC —
+        which is where "is this person an admin" is decided, by PostgreSQL,
+        as that person. Only after the RPC said yes and handed back a key
+        is a driver forked and a registry row written.
+        """
+        if not jwt:
+            self.workspace_refused += 1
+            return 401, {"ok": False, "reason": "unauthenticated",
+                         "error": "Sign in first (Authorization: Bearer <jwt>)."}
+        if not self.ws_limiter.allow(client_ip):
+            self.workspace_refused += 1
+            return 429, {"ok": False, "reason": "rate_limited",
+                         "error": ("You have started the maximum number of "
+                                   "simulated fleets for now — try again later."),
+                         "retry_after": self.ws_limiter.retry_after(client_ip)}
+        minutes = self._clamp((body or {}).get("minutes") if isinstance(body, dict) else None,
+                              WS_MINUTES_MIN, WS_MINUTES_MAX, WS_MINUTES_DEFAULT)
+        robots = self._clamp((body or {}).get("robots") if isinstance(body, dict) else None,
+                             WS_ROBOTS_MIN, WS_ROBOTS_MAX, WS_ROBOTS_DEFAULT)
+        with self._ws_lock:
+            self.registry.sweep()           # a dead driver never holds a slot
+            live = self.workspace_live_count()
+            ceiling = self.workspace_ceiling
+            if live >= ceiling:
+                self.workspace_refused += 1
+                return 429, {"ok": False, "reason": "ceiling",
+                             "error": ("Every simulated-fleet slot on this "
+                                       "deployment is busy — try again in a "
+                                       "few minutes."),
+                             "detail": f"{live} of {ceiling} workspace "
+                                       "simulators are live on this box",
+                             "retry_after": 60}
+            api = self._api(user_jwt=jwt)
+            try:
+                reply = api.rpc("workspace_sim_start",
+                                {"p_minutes": minutes, "p_robots": robots})
+            except SandboxError as exc:
+                self.workspace_refused += 1
+                return self._rpc_failure(exc, "workspace_sim_start")
+            finally:
+                api.close()
+            refused = self._rpc_refusal(reply)
+            if refused is not None:
+                self.workspace_refused += 1
+                return refused
+            try:
+                session = DriverSession.from_rpc(reply)
+            except SandboxError as exc:
+                self.workspace_refused += 1
+                return 502, {"ok": False, "reason": "error",
+                             "error": "The workspace backend answered with an "
+                                      "unusable simulator session.",
+                             "detail": exc.message}
+            # A restart: the RPC already revoked the previous key, so the old
+            # driver would die on its next write anyway — but a slot and a
+            # process are a slot and a process. Stop it now.
+            previous = self.registry.find(session.site_id)
+            if previous is not None:
+                self.registry.stop_sites([session.site_id])
+            pid: int | None = None
+            if self.config.sim:
+                try:
+                    pid = self.config.spawn(
+                        base_url=self.config.base_url, key=self.config.key,
+                        session=session, robots=max(session.robots or robots, 1),
+                        interval=self.config.interval, auth=AUTH_INGEST)
+                except Exception as exc:  # noqa: BLE001 - spawn failures
+                    # Do not leave a workspace with a live key and no fleet:
+                    # stop the run so the console shows "not running".
+                    stop_api = self._api(user_jwt=jwt)
+                    try:
+                        stop_api.rpc("workspace_sim_stop")
+                    except SandboxError:
+                        pass
+                    finally:
+                        stop_api.close()
+                    self.workspace_refused += 1
+                    return 502, {"ok": False, "reason": "error",
+                                 "error": "Could not start the simulated fleet.",
+                                 "detail": f"{type(exc).__name__}: {exc}"}
+            self.registry.add(SandboxRecord(
+                site_id=session.site_id, expires_at=session.expires_at,
+                pid=pid, console_url=None, origin="workspace",
+                started_at=_iso(_now()), robots=session.robots or robots,
+                kind=KIND_WORKSPACE))
+            self.workspace_started += 1
+        return 201, {"ok": True, "site_id": session.site_id,
+                     "expires_at": session.expires_at,
+                     "robots": session.robots or robots}
+
+    def workspace_sim_stop(self, jwt: str | None) -> tuple[int, dict[str, Any]]:
+        """``POST /api/workspace/sim/stop``: revoke (RPC), SIGTERM, forget."""
+        if not jwt:
+            return 401, {"ok": False, "reason": "unauthenticated",
+                         "error": "Sign in first (Authorization: Bearer <jwt>)."}
+        api = self._api(user_jwt=jwt)
+        try:
+            reply = api.rpc("workspace_sim_stop")
+        except SandboxError as exc:
+            return self._rpc_failure(exc, "workspace_sim_stop")
+        finally:
+            api.close()
+        refused = self._rpc_refusal(reply)
+        if refused is not None:
+            return refused
+        site = reply.get("site_id")
+        if isinstance(site, str) and site:
+            with self._ws_lock:
+                self.registry.stop_sites([site])
+                self.registry.drop([site])
+        return 200, {"ok": True, "site_id": site}
+
+    def workspace_sim_status(self, jwt: str | None) -> tuple[int, dict[str, Any]]:
+        """``GET /api/workspace/sim/status``: the RPC's view + driver_alive."""
+        if not jwt:
+            return 401, {"ok": False, "reason": "unauthenticated",
+                         "error": "Sign in first (Authorization: Bearer <jwt>)."}
+        api = self._api(user_jwt=jwt)
+        try:
+            reply = api.rpc("workspace_sim_status")
+        except SandboxError as exc:
+            return self._rpc_failure(exc, "workspace_sim_status")
+        finally:
+            api.close()
+        refused = self._rpc_refusal(reply)
+        if refused is not None:
+            return refused
+        site = reply.get("site_id")
+        record = self.registry.find(site) if isinstance(site, str) else None
+        alive = bool(record is not None and record.kind == KIND_WORKSPACE
+                     and not record.expired() and record.sim_running())
+        return 200, {"ok": True, "site_id": site,
+                     "running": bool(reply.get("running")),
+                     "expires_at": reply.get("expires_at"),
+                     "robots": reply.get("robots"),
+                     "started_at": reply.get("started_at"),
+                     "driver_alive": alive}
 
     def sweep(self) -> dict[str, Any]:
         """Stop the simulators of sandboxes whose TTL has run out."""
@@ -419,6 +693,51 @@ class _Handler(BaseHTTPRequestHandler):
         if length > 0:
             self.rfile.read(length)
 
+    def _read_json(self) -> Any:
+        """Read a small JSON body, or None. Only the workspace start route
+        uses this; the demo mint keeps :meth:`_drain`'s never-parse rule.
+
+        Bounded exactly like ``_drain``: a body over :data:`MAX_BODY_BYTES`
+        or a chunked one is not read whole, so the connection is closed
+        rather than desynchronised, and the request is treated as having
+        no body (every field is optional and clamped anyway).
+        """
+        if self.headers.get("Transfer-Encoding"):
+            self.close_connection = True
+            return None
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            self.close_connection = True
+            return None
+        if length <= 0:
+            return None
+        if length > MAX_BODY_BYTES:
+            self.close_connection = True
+            self.rfile.read(MAX_BODY_BYTES)
+            return None
+        raw = self.rfile.read(length)
+        try:
+            return json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None
+
+    def _bearer(self) -> str | None:
+        """The caller's own JWT from ``Authorization: Bearer``, or None.
+
+        Not validated here — PostgREST validates it, as the person. The
+        door only refuses the obvious: no header, wrong scheme, empty or
+        absurdly long values that could never be a JWT.
+        """
+        raw = (self.headers.get("Authorization") or "").strip()
+        scheme, _, value = raw.partition(" ")
+        value = value.strip()
+        if scheme.lower() != "bearer" or not value or len(value) > 8192:
+            return None
+        if any(ch.isspace() for ch in value):
+            return None
+        return value
+
     def _json(self, status: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload).encode()
         self.send_response(status)
@@ -461,7 +780,9 @@ class _Handler(BaseHTTPRequestHandler):
         self._drain()
         self.send_response(204)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        # Authorization is what the console sends on the workspace routes.
+        self.send_header("Access-Control-Allow-Headers",
+                         "Content-Type, Authorization")
         self.send_header("Access-Control-Max-Age", "600")
         self.send_header("Content-Length", "0")
         self._cors()
@@ -474,18 +795,35 @@ class _Handler(BaseHTTPRequestHandler):
             return self._json(200, self.service.health())
         if path == ROUTE_LIMITS:
             return self._json(200, self.service.limits())
+        if path == ROUTE_WS_SIM_STATUS:
+            status, payload = self.service.workspace_sim_status(self._bearer())
+            return self._json(status, payload)
         if path == ROUTE_MINT:
             # Minting is not safe or idempotent, and a browser prefetching
             # a link must never burn a sandbox. POST it.
             return self._json(405, {
                 "ok": False, "reason": "method",
                 "error": f"POST {ROUTE_MINT} to start a demo sandbox"})
+        if path in (ROUTE_WS_SIM_START, ROUTE_WS_SIM_STOP):
+            return self._json(405, {
+                "ok": False, "reason": "method",
+                "error": f"POST {path} — starting or stopping a fleet is "
+                         "not a safe GET"})
         return self._json(404, {"ok": False, "reason": "not_found",
                                 "error": f"no route {path}"})
 
     def do_POST(self) -> None:  # noqa: N802
-        self._drain()
         path = urlparse(self.path).path.rstrip("/") or "/"
+        if path == ROUTE_WS_SIM_START:
+            body = self._read_json()
+            status, payload = self.service.workspace_sim_start(
+                self._bearer(), self._ip, body)
+            return self._json(status, payload)
+        if path == ROUTE_WS_SIM_STOP:
+            self._drain()
+            status, payload = self.service.workspace_sim_stop(self._bearer())
+            return self._json(status, payload)
+        self._drain()
         if path != ROUTE_MINT:
             return self._json(404, {"ok": False, "reason": "not_found",
                                     "error": f"no route {path}"})
@@ -577,7 +915,11 @@ def run_sandbox_serve(base_url: str, key: str, *, host: str = DEFAULT_HOST,
                       allow_origin: str = "*",
                       sweep_interval: float = DEFAULT_SWEEP_S,
                       duration: float | None = None,
-                      quiet: bool = False) -> int:
+                      quiet: bool = False,
+                      workspace_max_live: int | None = None,
+                      workspace_rate: int = DEFAULT_WORKSPACE_RATE,
+                      workspace_rate_window: float = DEFAULT_WORKSPACE_RATE_WINDOW_S,
+                      ) -> int:
     """``yantraops sandbox-serve`` — run the door until Ctrl-C / SIGTERM."""
     config = ServeConfig(
         base_url=base_url, key=key, console=console, ttl=ttl, robots=robots,
@@ -585,7 +927,9 @@ def run_sandbox_serve(base_url: str, key: str, *, host: str = DEFAULT_HOST,
         interval=interval, state_file=state_file, rate=rate,
         rate_window_s=rate_window, max_inflight=max_inflight,
         trusted_proxy_hops=trusted_proxy_hops, allow_origin=allow_origin,
-        quiet=quiet)
+        quiet=quiet, workspace_max_live=workspace_max_live,
+        workspace_rate=workspace_rate,
+        workspace_rate_window_s=workspace_rate_window)
     try:
         server = SandboxHTTP(config, host, port)
     except OSError as exc:
@@ -605,11 +949,16 @@ def run_sandbox_serve(base_url: str, key: str, *, host: str = DEFAULT_HOST,
         print(f"yantraops: sandbox door on http://{host}:{port}\n"
               f"  mint      POST {ROUTE_MINT}\n"
               f"  limits    GET  {ROUTE_LIMITS}\n"
+              f"  workspace POST {ROUTE_WS_SIM_START} | "
+              f"POST {ROUTE_WS_SIM_STOP} | GET {ROUTE_WS_SIM_STATUS}\n"
               f"  health    GET  {ROUTE_HEALTH}\n"
               f"  backend   {base_url}\n"
               f"  console   {console_base}\n"
               f"  ceiling   {server.service.ceiling} live sandboxes, "
-              f"{rate}/{int(rate_window)}s per IP", flush=True)
+              f"{rate}/{int(rate_window)}s per IP; "
+              f"{server.service.workspace_ceiling} workspace simulators, "
+              f"{workspace_rate}/{int(workspace_rate_window)}s per IP",
+              flush=True)
     server.start()
     try:
         stop.wait(duration) if duration is not None else stop.wait()

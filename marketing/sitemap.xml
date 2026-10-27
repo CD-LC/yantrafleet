@@ -11,13 +11,13 @@
                     this static site; /docs/ is checked-in Markdown, and the
                     console/academy are applications behind a query string.
 
-  The host below is the placeholder https://yantrika.ai and MUST
-  be replaced at deploy time along with every canonical/og:url tag - see
+  The host below is the production domain https://yantrika.ai; replace it
+  if you deploy elsewhere along with every canonical/og:url tag - see
   marketing/README.md, which lists every file and tag that carries it.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://yantrika.ai/index.html</loc>
+    <loc>https://yantrika.ai/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -55,5 +55,15 @@
     <loc>https://yantrika.ai/changelog.html</loc>
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://yantrika.ai/pricing.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://yantrika.ai/integrations.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
 </urlset>

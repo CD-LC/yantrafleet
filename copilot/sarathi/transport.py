@@ -16,6 +16,8 @@ from __future__ import annotations
 import abc
 from typing import Any
 
+from .scope import current_headers
+
 Params = list[tuple[str, str]]
 
 
@@ -38,10 +40,12 @@ class Transport(abc.ABC):
 class SupabaseTransport(Transport):
     """Real transport: GET {url}/rest/v1/{table} with the anon key."""
 
-    def __init__(self, url: str, key: str, timeout_s: float = 10.0) -> None:
+    def __init__(self, url: str, key: str, timeout_s: float = 10.0,
+                 client: Any = None) -> None:
         import httpx  # local import keeps offline installs light
 
-        self._client = httpx.Client(
+        # ``client`` is an injectable httpx.Client (tests: MockTransport).
+        self._client = client or httpx.Client(
             base_url=f"{url.rstrip('/')}/rest/v1",
             headers={
                 "apikey": key,
@@ -55,7 +59,12 @@ class SupabaseTransport(Transport):
         import httpx
 
         try:
-            resp = self._client.get(f"/{table}", params=params)
+            # Per-request credential headers (scope.py): the asker's own JWT
+            # as Authorization, or their sandbox token. Passed per call, so
+            # the shared client - and every concurrent request - is never
+            # mutated. Empty (the default) leaves behaviour unchanged.
+            resp = self._client.get(f"/{table}", params=params,
+                                    headers=current_headers() or None)
         except httpx.HTTPError as exc:  # DNS, timeout, refused, TLS, ...
             raise TransportError(f"supabase unreachable: {exc}") from exc
         if resp.status_code >= 400:

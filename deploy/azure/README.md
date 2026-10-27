@@ -196,6 +196,40 @@ tail -f /var/log/yantrafleet-install.log      # watch the install
 systemctl status 'yantra-*'                    # confirm services are up
 ```
 
+### Turning on self-serve workspaces (optional)
+
+A visitor who creates an account on the site gets their own **workspace**
+(a `WS-<hex>` site), the admin role in it, ingest keys for their robots and
+a one-click simulated fleet. It is **off by default** and purely additive:
+a deployment that never does the steps below behaves exactly as before.
+
+1. **Read the THREAT MODEL block in `supabase/0019_workspaces.sql`**, then
+   apply it. It is OPT-IN, needs 0007 (RBAC) and does *not* need the demo
+   sandbox (0009):
+
+   ```bash
+   sudo -u yantra /opt/yantrafleet/.venv/bin/python -m yantraops migrate --include-opt-in
+   ```
+
+2. **Re-render nginx** so the new `/api/workspace/` location and its
+   `yantra_ws` rate-limit zone (30 requests/min per address, burst 10) are
+   live. Use the "Updating an already-running VM" re-render step below
+   (`envsubst` of the shared `deploy/aws/nginx/yantrafleet.conf.template`,
+   then `nginx -t && systemctl reload nginx`).
+3. **Restart the door** - the same `yantra-sandbox` process serves the
+   workspace routes, with its own ceiling (`--workspace-max-live 12` in the
+   shipped unit, env `YANTRAOPS_WORKSPACE_MAX`):
+
+   ```bash
+   sudo systemctl restart yantra-sandbox     # or enable it, if it was never on
+   curl -s localhost:8088/healthz            # now includes workspace_live
+   ```
+
+The door needs no new secret: every workspace route forwards the *signed-in
+person's own JWT* to PostgREST, so the same anon key in
+`/etc/yantrafleet.env` is the right one. Until 0019 is applied the routes
+answer `503 {"reason":"not_enabled"}` and the console hides the feature.
+
 ## Secrets in Key Vault, not in custom_data, by default
 
 Every value in the "EDIT ME" block of `custom-data.sh` used to go

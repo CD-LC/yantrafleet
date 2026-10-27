@@ -39,7 +39,9 @@ from typing import Any
 
 import httpx
 
-from yantrabridge.sink import DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL, SupabaseSink
+from yantrabridge.sink import (DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL,
+                               SupabaseSink, check_ingest_config,
+                               resolve_ingest_key)
 from yantrabridge.sources import DEFAULT_STATE_TOPIC, MqttSource, read_jsonl
 from yantrabridge.translate import (
     BATTERY_ALERT_THRESHOLD,
@@ -77,7 +79,15 @@ def build_parser() -> argparse.ArgumentParser:
                      default=BATTERY_ALERT_THRESHOLD,
                      help="low-battery alert threshold in %% (default: %(default)s)")
     out.add_argument("--site", help="stamp site_id on written rows and only "
-                                    "poll commands for this site")
+                                    "poll commands for this site (or env "
+                                    "YANTRA_SITE_ID; required, as WS-<8 hex>, "
+                                    "with --ingest-key)")
+    out.add_argument("--ingest-key", metavar="yk_...",
+                     help="write as a self-serve workspace's connector "
+                          "(supabase/0019): sends x-yf-ingest-key on every "
+                          "request, namespaces ids with '<site>-', skips the "
+                          "fleet_meta heartbeat (or env YANTRA_INGEST_KEY; "
+                          "prefer the env var - argv is visible in `ps`)")
 
     cmds = p.add_argument_group("commands (MQTT mode)")
     cmds.add_argument("--commands", action="store_true",
@@ -126,13 +136,43 @@ def build_import_parser() -> argparse.ArgumentParser:
                      default=BATTERY_ALERT_THRESHOLD,
                      help="low-battery alert threshold in %% "
                           "(default: %(default)s)")
+    out.add_argument("--site", help="the workspace's WS-<8 hex> site id (or "
+                                    "env YANTRA_SITE_ID); required with "
+                                    "--ingest-key")
+    out.add_argument("--ingest-key", metavar="yk_...",
+                     help="import into a self-serve workspace (supabase/0019) "
+                          "with its ingest key (or env YANTRA_INGEST_KEY)")
     return p
+
+
+def _workspace_options(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Resolve and validate the workspace-mode options, or None on error.
+
+    Returns the ``ingest_key``/``site`` kwargs for :class:`SupabaseSink`
+    (both None outside workspace mode). A key without a ``WS-<8 hex>`` site,
+    or a malformed key, prints one line to stderr and returns None so the
+    caller exits 2 *before* any network traffic - the same fail-fast the
+    sink's own constructor enforces, surfaced as a CLI error.
+    """
+    key = resolve_ingest_key(getattr(args, "ingest_key", None))
+    site = (getattr(args, "site", None) or os.environ.get("YANTRA_SITE_ID") or "").strip() or None
+    try:
+        check_ingest_config(key, site)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return None
+    if key:
+        args.site = site          # so _stamp_site and the sink agree
+    return {"ingest_key": key, "site": site if key else None}
 
 
 def run_import(argv: list[str]) -> int:
     from yantrabridge import importer
 
     args = build_import_parser().parse_args(argv)
+    ws = _workspace_options(args)
+    if ws is None:
+        return 2
     if bool(args.mcap) == bool(args.jsonl):
         print("error: choose exactly one recording: --mcap <file> or "
               "--jsonl <file>", file=sys.stderr)
@@ -157,7 +197,7 @@ def run_import(argv: list[str]) -> int:
     try:
         # ----- replay mode: Nx real time, robots update live ---------------
         if args.rate > 0 and not args.dry_run:
-            with SupabaseSink(args.supabase_url, args.supabase_key) as sink:
+            with SupabaseSink(args.supabase_url, args.supabase_key, **ws) as sink:
                 def on_event(ev: "importer.ImportEvent") -> None:
                     if ev.robot_row is not None:
                         sink.upsert_robots([ev.robot_row])
@@ -191,7 +231,7 @@ def run_import(argv: list[str]) -> int:
                   "(omitted from dry-run output) --")
             return 0
 
-        with SupabaseSink(args.supabase_url, args.supabase_key) as sink:
+        with SupabaseSink(args.supabase_url, args.supabase_key, **ws) as sink:
             sink.upsert_robots(robots)
             sink.insert_telemetry(telemetry)
             sink.insert_alerts(alerts)
@@ -222,10 +262,12 @@ def run_file(args: argparse.Namespace) -> int:
         print(f"-- fleet_meta heartbeat: id=1 writer_id=yantrabridge (skipped: dry-run) --")
         return 0
 
-    with SupabaseSink(args.supabase_url, args.supabase_key) as sink:
+    with SupabaseSink(args.supabase_url, args.supabase_key,
+                      **_workspace_options(args)) as sink:
         counts = sink.push(robots, alerts)
+    heartbeat = "heartbeat skipped (workspace mode)" if sink.ingest_key else "1 heartbeat"
     print(f"pushed: {counts['robots']} robot rows, {counts['alerts']} alerts, "
-          "1 heartbeat")
+          f"{heartbeat}")
     return 0
 
 
@@ -275,9 +317,13 @@ def run_mqtt(args: argparse.Namespace,
     from yantrabridge.mqtt_runtime import LiveMqttConfig, MqttConnectionManager
 
     translator = Translator(battery_threshold=args.battery_threshold)
+    ws = _workspace_options(args)
+    if ws is None:
+        return 2
     sink: SupabaseSink | None = None
     if not args.dry_run:
-        sink = SupabaseSink(args.supabase_url, args.supabase_key, transport=transport)
+        sink = SupabaseSink(args.supabase_url, args.supabase_key,
+                            transport=transport, **ws)
     publisher = None  # set below when --commands; on_state reads the closure
 
     def on_state(msg: dict[str, Any]) -> None:
@@ -340,7 +386,8 @@ def run_mqtt(args: argparse.Namespace,
 
         publisher = CommandPublisher(
             _publish, args.supabase_url, args.supabase_key,
-            site=args.site, transport=transport)
+            site=args.site, transport=transport,
+            ingest_key=ws["ingest_key"])
 
         def _poll_loop() -> None:
             while not stop_polling.wait(args.commands_interval):
@@ -421,7 +468,11 @@ def main(argv: list[str] | None = None) -> int:
         print("error: --commands needs live MQTT mode "
               "(--mqtt-host, without --dry-run)", file=sys.stderr)
         return 2
-    return run_file(args) if args.file else run_mqtt(args)
+    if args.file:
+        if _workspace_options(args) is None:
+            return 2
+        return run_file(args)
+    return run_mqtt(args)
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ copilot, console) can talk to it.
 | `0006_harden.sql` | **opt-in: hardened** | moving beyond demo — drops `demo_all`; authenticated = read-only, writers switch to the service_role key |
 | `0007_rbac.sql` | **opt-in: RBAC** | production — replaces demo/0006 policies with role-based ones (`user_roles`, `yf_role()`/`yf_has_role()`, `decide_command()` RPC, academy tables). Can be applied straight after 0005; drops 0006's policies itself if present |
 | `0008_app_settings.sql` | **opt-in: settings panel** | requires 0007 (`yf_has_role`) — adds `app_settings` + `admin_list_settings()`/`admin_set_setting()` RPCs so an admin can rotate `GEMINI_API_KEY`/`SARATHI_TOKEN`/`WEBHOOK_URL`/`YANTRA_WEBHOOK_SECRET`/`TWILIO_*` live from the console, with the deploy-time env var staying the fallback |
+| `0019_workspaces.sql` | **opt-in: self-serve workspaces** | requires 0007 (0009 not needed) — adds `workspaces`/`ingest_keys`/`workspace_invites`/`workspace_sims`, an `auth.users` trigger that gives every sign-up a `WS-<hex>` workspace + admin role, bearer **ingest keys** (`x-yf-ingest-key`, sha256 at rest) with anon policies pinned to one workspace, and the `my_workspace()`/`workspace_*` RPCs. Contract: [`docs/WORKSPACES.md`](../docs/WORKSPACES.md); apply with `migrate --include-opt-in` |
 
 The three postures (demo / hardened / RBAC), the role capability matrix,
 and what to reconfigure after each opt-in file are documented in

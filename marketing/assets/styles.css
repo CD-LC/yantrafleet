@@ -27,7 +27,7 @@
 *{box-sizing:border-box}
 html{color-scheme:light}
 body{
-  margin:0; background:var(--bg); color:var(--ink);
+  margin:0; background:var(--bg); color:var(--ink); overflow-x:hidden;
   font:16px/1.6 var(--font); -webkit-font-smoothing:antialiased;
 }
 img{max-width:100%}
@@ -111,7 +111,7 @@ nav.top a.cta:hover{background:#000; text-decoration:none}
 .band a{color:#9ec5f4}
 .band .btn.primary{background:#fff; color:var(--ink)}
 .band .btn.primary:hover{background:#eee}
-.band .btn.secondary{border-color:#4a4839; color:#fff}
+.band .btn.secondary{background:transparent; border-color:#6a6859; color:#fff}
 .band .btn.secondary:hover{border-color:#eae7dc}
 
 /* ---------- table ---------- */
@@ -233,3 +233,146 @@ h2[id], h3[id]{scroll-margin-top:78px}
 table.checks tr.cathead th{background:var(--ink); color:#fff; font-size:13px; letter-spacing:.03em; position:static}
 table.checks tr.cathead .catcount{font-weight:400; color:#b8b4a6; margin-left:8px}
 table.checks .exp{display:block; color:var(--muted); font-size:13px; margin-top:3px; font-weight:400}
+
+/* ================================================================
+   v0.13 — landing page redesign (hosted platform + open source)
+   ================================================================
+   The hero goes dark (the console's own palette) so the product shot
+   and the animated floor plan read as "this is the thing you get",
+   then the page returns to the light editorial base for the copy. */
+:root{
+  --ink-dark:#0d0d0d; --surface-dark:#1a1a19; --border-dark:rgba(255,255,255,.08);
+  --cyan:#5ad1ff; --green:#19c37d; --amber:#fab219; --red:#d03b3b;
+  --grad:linear-gradient(120deg,#2563c9 0%,#4f8be9 45%,#19c37d 100%);
+}
+.hero.dark{background:
+  radial-gradient(1100px 540px at 85% -10%,rgba(37,99,201,.35),transparent 60%),
+  radial-gradient(700px 400px at 0% 100%,rgba(25,195,125,.18),transparent 60%),
+  var(--ink-dark);
+  color:#eae7dc; padding:72px 0 0; overflow:hidden; border-bottom:1px solid var(--border-dark)}
+.hero.dark .kicker{color:#9ec5f4}
+.hero.dark h1{color:#fff; max-width:15ch; font-size:clamp(34px,5.4vw,60px); letter-spacing:-.02em; line-height:1.08}
+.hero.dark h1 em{font-style:normal; background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent}
+.hero.dark .lede{color:#c3c2b7; max-width:58ch}
+.hero.dark .btn.primary{background:#fff; color:var(--ink)}
+.hero.dark .btn.primary:hover{background:#e9f0ff}
+.hero.dark .btn.secondary{background:rgba(255,255,255,.06); border-color:rgba(255,255,255,.22); color:#fff}
+.hero.dark .btn.secondary:hover{border-color:#fff}
+.hero.dark .btn.glow{background:var(--accent); color:#fff; border-color:transparent; box-shadow:0 0 0 1px rgba(255,255,255,.08),0 10px 30px rgba(37,99,201,.45)}
+.hero.dark .btn.glow:hover{filter:brightness(1.08)}
+.hero.dark .proofline{color:#8a8678}
+.hero.dark .proofline strong{color:#c3c2b7}
+.hero-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.05fr); gap:36px; align-items:center}
+@media (max-width:900px){.hero-grid{grid-template-columns:minmax(0,1fr)}}
+.hero-copy .actions{margin:28px 0 14px}
+.hero .sub-cta{font-size:13.5px; color:#8a8678; margin:0}
+.hero .sub-cta a{color:#9ec5f4}
+
+/* animated floor plan */
+.floor{position:relative; border:1px solid rgba(255,255,255,.1); border-radius:14px; background:#141413; box-shadow:0 30px 80px rgba(0,0,0,.55); overflow:hidden}
+.floor svg{display:block; width:100%; height:auto}
+.floor .hud{position:absolute; left:14px; top:12px; display:flex; gap:8px; flex-wrap:wrap}
+.floor .chipd{font-size:11.5px; font-weight:600; color:#c3c2b7; background:rgba(26,26,25,.9); border:1px solid rgba(255,255,255,.1); border-radius:999px; padding:4px 10px; display:inline-flex; gap:6px; align-items:center}
+.floor .chipd i{width:7px; height:7px; border-radius:50%; display:inline-block}
+.floor .float{position:absolute; background:rgba(26,26,25,.96); border:1px solid rgba(255,255,255,.14); border-radius:9px; padding:8px 11px; font-size:11.5px; line-height:1.4; color:#eae7dc; box-shadow:0 14px 40px rgba(0,0,0,.5); animation:floaty 6s ease-in-out infinite; max-width:196px}
+.floor .float b{display:block; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:#8a8678; margin-bottom:3px}
+.floor .float.alert{right:12px; top:44px; border-left:3px solid var(--red)}
+.floor .float.approve{left:14px; bottom:14px; border-left:3px solid var(--amber); animation-delay:-2s}
+.floor .float.copilot{right:14px; bottom:14px; border-left:3px solid var(--accent); animation-delay:-4s}
+.floor .float .mini{display:inline-block; margin-top:6px; font-size:11px; font-weight:700; padding:2px 9px; border-radius:999px; background:#2563c9; color:#fff}
+.floor .float .mini.ghost{background:transparent; border:1px solid rgba(255,255,255,.25); color:#eae7dc; margin-left:4px}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@media (prefers-reduced-motion:reduce){.floor .float{animation:none}.floor svg *{animation:none!important}}
+@media (max-width:640px){.floor .float.approve,.floor .float.copilot{display:none}}
+
+/* trust strip */
+.strip{background:var(--ink-dark); color:#8a8678; border-bottom:1px solid var(--border-dark)}
+.strip .wrap{display:flex; gap:28px; flex-wrap:wrap; justify-content:center; padding:16px 24px; font-size:13px}
+.strip b{color:#eae7dc; font-weight:700}
+
+/* product shots */
+.shot{border:1px solid var(--border-strong); border-radius:12px; overflow:hidden; background:#0d0d0d; box-shadow:0 24px 60px rgba(28,27,23,.18)}
+.shot .bar{display:flex; gap:6px; padding:9px 12px; background:#1a1a19; border-bottom:1px solid rgba(255,255,255,.08)}
+.shot .bar i{width:10px; height:10px; border-radius:50%; background:#3a3a38; display:block}
+.shot img{display:block; width:100%; height:auto}
+.showcase{display:grid; grid-template-columns:300px minmax(0,1fr); gap:28px; align-items:start; margin-top:28px}
+@media (max-width:860px){.showcase{grid-template-columns:minmax(0,1fr)}}
+.showcase .tabs{display:flex; flex-direction:column; gap:6px}
+.showcase .tabs button{text-align:left; font:inherit; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:12px 14px; cursor:pointer; color:var(--ink)}
+.showcase .tabs button b{display:block; font-size:14.5px}
+.showcase .tabs button span{display:block; font-size:13px; color:var(--muted); margin-top:2px}
+.showcase .tabs button.on{border-color:var(--accent); background:var(--accent-dim)}
+.showcase .tabs button:hover{border-color:var(--accent)}
+
+/* two paths: cloud vs self-host */
+.paths{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; margin-top:26px}
+@media (max-width:760px){.paths{grid-template-columns:minmax(0,1fr)}}
+.path{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px 28px; position:relative}
+.path.cloud{border-color:#b9cdf3; background:linear-gradient(180deg,#f3f7ff,#fff)}
+.path h3{font-size:20px; margin:0 0 6px; padding-right:96px}
+.path pre{max-width:100%}
+.path .tag{position:absolute; right:18px; top:18px; font-size:11.5px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:3px 10px; border-radius:999px; background:var(--accent); color:#fff}
+.path ul{margin:14px 0 18px; padding:0; list-style:none}
+.path li{padding-left:24px; position:relative; margin:0 0 8px; font-size:14.5px; color:var(--muted)}
+.path li::before{content:"✓"; position:absolute; left:0; color:var(--good); font-weight:800}
+
+/* how it works */
+.steps{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:26px; counter-reset:step}
+@media (max-width:760px){.steps{grid-template-columns:minmax(0,1fr)}}
+.step{background:var(--surface); border:1px solid var(--border); border-radius:var(--r); padding:22px}
+.step::before{counter-increment:step; content:counter(step); display:inline-grid; place-items:center; width:30px; height:30px; border-radius:9px; background:var(--ink); color:#fff; font-weight:800; margin-bottom:12px}
+.step h3{font-size:16px}
+.step p{font-size:14.5px; color:var(--muted); margin:6px 0 0}
+.step code{font-size:12.5px}
+
+/* integrations strip */
+.logos{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:12px; margin-top:24px}
+.logos .lg{background:var(--surface); border:1px solid var(--border); border-radius:var(--r-sm); padding:14px 16px; font-weight:700; font-size:14px; display:flex; flex-direction:column; align-items:flex-start; gap:8px; min-width:0}
+.logos .lg span{font-weight:500; color:var(--muted); font-size:12.5px; display:block; line-height:1.4}
+.logos .lg i{font-style:normal; width:30px; height:30px; border-radius:8px; background:var(--accent-dim); color:var(--accent); display:grid; place-items:center; font-size:14px; flex:none}
+
+/* pricing */
+.plans{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; margin-top:26px}
+@media (max-width:860px){.plans{grid-template-columns:minmax(0,1fr)}}
+.plan{background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:26px; display:flex; flex-direction:column}
+.plan.hi{border-color:var(--accent); box-shadow:0 18px 50px rgba(37,99,201,.15)}
+.plan h3{font-size:19px; margin:0}
+.plan .price{font-size:36px; font-weight:800; letter-spacing:-.02em; margin:10px 0 2px}
+.plan .price small{font-size:14px; font-weight:500; color:var(--muted)}
+.plan .who{color:var(--muted); font-size:14px; min-height:40px}
+.plan ul{list-style:none; margin:16px 0 20px; padding:0; flex:1}
+.plan li{padding-left:22px; position:relative; margin:0 0 8px; font-size:14px; color:var(--muted)}
+.plan li::before{content:"✓"; position:absolute; left:0; color:var(--good); font-weight:800}
+.plan li.no::before{content:"–"; color:var(--dim)}
+.badge-beta{display:inline-block; font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; padding:2px 9px; border-radius:999px; background:#e2f3e2; color:#116611; margin-left:8px; vertical-align:middle}
+
+/* FAQ */
+details.faq{border-top:1px solid var(--border); padding:14px 0}
+details.faq summary{cursor:pointer; font-weight:700; font-size:16px; list-style:none; display:flex; justify-content:space-between; gap:12px}
+details.faq summary::-webkit-details-marker{display:none}
+details.faq summary::after{content:"+"; color:var(--dim); font-weight:400}
+details.faq[open] summary::after{content:"–"}
+details.faq p{margin:10px 0 0; color:var(--muted); max-width:70ch}
+
+/* final CTA band */
+.band.grad{background:var(--ink-dark); position:relative; overflow:hidden}
+.band.grad::before{content:""; position:absolute; inset:-40% -20%; background:radial-gradient(600px 300px at 30% 50%,rgba(37,99,201,.35),transparent 60%),radial-gradient(500px 300px at 75% 60%,rgba(25,195,125,.22),transparent 60%); pointer-events:none}
+.band.grad .wrap{position:relative}
+
+/* nav tweaks for the extra items */
+nav.top a.ghlink{display:inline-flex; align-items:center; gap:6px}
+nav.top a.ghlink svg{width:16px; height:16px}
+@media (min-width:761px) and (max-width:1040px){nav.top{gap:12px; font-size:13px}}
+
+/* code blocks on integrations */
+.snip{position:relative}
+.snip .copybtn{position:absolute; top:8px; right:8px; font:12px/1 var(--font); font-weight:700; padding:6px 10px; border-radius:6px; border:1px solid #4a4839; background:#2a2a28; color:#eae7dc; cursor:pointer}
+.snip .copybtn:hover{background:#3a3a38}
+.subnav{display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 0}
+.subnav a{font-size:13.5px; font-weight:700; border:1px solid var(--border-strong); border-radius:999px; padding:6px 14px; color:var(--ink)}
+.subnav a:hover{border-color:var(--ink); text-decoration:none}
+
+.grid.two{grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
+.grid{grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))}
+pre{max-width:100%}
+.path,.step,.plan,.card{min-width:0}

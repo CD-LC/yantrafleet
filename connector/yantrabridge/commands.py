@@ -54,7 +54,9 @@ from typing import Any, Callable
 
 import httpx
 
-from yantrabridge.sink import DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL
+from yantrabridge.sink import (DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL,
+                               INGEST_KEY_HEADER, check_ingest_config,
+                               resolve_ingest_key, strip_namespace)
 
 log = logging.getLogger(__name__)
 
@@ -152,10 +154,17 @@ class CommandPublisher:
         transport: httpx.BaseTransport | None = None,
         timeout: float = 10.0,
         limit: int = 20,
+        ingest_key: str | None = None,
     ) -> None:
         self._publish = mqtt_publish
         self.site = resolve_site(site)
         self.limit = limit
+        #: 0019 workspace mode: the same key the sink writes with. The
+        #: console queues commands against the NAMESPACED robot id
+        #: (``WS-xxxx-AGV-001``); the robot's VDA serial is the bare one, so
+        #: :meth:`poll` strips the prefix before routing.
+        self.ingest_key = resolve_ingest_key(ingest_key)
+        check_ingest_config(self.ingest_key, self.site)
         self._warned_missing_site = False
         if self.site == ANY_SITE:
             log.warning(
@@ -169,13 +178,16 @@ class CommandPublisher:
         resolved_url = (url or os.environ.get("SUPABASE_URL")
                         or DEFAULT_SUPABASE_URL).rstrip("/")
         resolved_key = key or os.environ.get("SUPABASE_KEY") or DEFAULT_SUPABASE_KEY
+        headers = {
+            "apikey": resolved_key,
+            "Authorization": f"Bearer {resolved_key}",
+            "Content-Type": "application/json",
+        }
+        if self.ingest_key:
+            headers[INGEST_KEY_HEADER] = self.ingest_key
         self._client = httpx.Client(
             base_url=f"{resolved_url}/rest/v1",
-            headers={
-                "apikey": resolved_key,
-                "Authorization": f"Bearer {resolved_key}",
-                "Content-Type": "application/json",
-            },
+            headers=headers,
             timeout=timeout,
             transport=transport,
         )
@@ -241,7 +253,10 @@ class CommandPublisher:
                 with self._lock:
                     self._done.add(cid)
                 continue
-            serial = _sanitize_serial(str(row.get("robot_id") or ""))
+            robot_id = str(row.get("robot_id") or "")
+            if self.ingest_key:
+                robot_id = strip_namespace(robot_id, self.site)
+            serial = _sanitize_serial(robot_id)
             manufacturer = self._manufacturer_for(serial)
             if manufacturer is None:
                 log.warning("command %s: unknown manufacturer for robot %s; "
@@ -418,7 +433,10 @@ class CommandPublisher:
             known = self._manufacturers.get(serial)
         if known:
             return known
-        params = {"id": f"eq.{serial}", "select": "id,vendor", "limit": "1"}
+        # In workspace mode the row's id carries the site prefix the sink
+        # wrote; the serial we route on is the bare one.
+        row_id = f"{self.site}-{serial}" if self.ingest_key else serial
+        params = {"id": f"eq.{row_id}", "select": "id,vendor", "limit": "1"}
         if self.site != ANY_SITE:
             params["site_id"] = f"eq.{self.site}"
         try:

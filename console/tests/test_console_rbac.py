@@ -251,7 +251,9 @@ def test_anon_load_prompts_signin_and_shows_no_data(
     expect(page.locator("#btn-signin")).to_be_visible()  # header entry point
     expect(page.locator("#ov-alerts")).not_to_contain_text(tc.SEED_ALERT_MSG)
     page.locator("#nav button[data-v='liveops']").click()
-    expect(page.locator("#fl-list")).to_contain_text("AMR-01", timeout=15_000)
+    # v0.13: the mock fleet is cleared in the sign-in-required state, so no
+    # imaginary robots move behind the modal — and no backend row leaks in.
+    expect(page.locator("#fl-list")).to_contain_text("No robots", timeout=15_000)
     expect(page.locator("#fl-list")).not_to_contain_text("TestBot X1")
     assert errors == [], f"anon RBAC load raised page errors: {errors}"
 

@@ -81,6 +81,10 @@ class Toolbox:
     transport: Transport
     row_limit: int = 50
     log: list[ToolResult] = field(default_factory=list)
+    #: When set, EVERY table query carries ``site_id=eq.<site>`` (and the
+    #: site-less ``fleet_meta`` heartbeat is not read at all). None keeps
+    #: the pre-workspace behaviour byte for byte.
+    site: str | None = None
 
     # -- internals ---------------------------------------------------------
 
@@ -91,6 +95,14 @@ class Toolbox:
         return result
 
     def _rows(self, table: str, params: Params) -> list[dict[str, Any]]:
+        if self.site:
+            # RLS decides what is visible; this makes the answer SCOPED to
+            # the workspace the asker is looking at (an admin with several
+            # sites would otherwise get all of them). fleet_meta has no
+            # site_id column - filtering it would be a PostgREST error.
+            if table == "fleet_meta":
+                return []
+            params = [*params, ("site_id", f"eq.{self.site}")]
         return self.transport.get(table, params)
 
     # -- tools -------------------------------------------------------------
@@ -98,6 +110,11 @@ class Toolbox:
     def get_fleet_summary(self) -> ToolResult:
         """Aggregate snapshot: robot counts, battery stats, alerts, throughput."""
         robots = self._rows("robots", [("select", "*")])
+        # fleet_meta is one global heartbeat row with no site_id: in a
+        # site-scoped (workspace) request it is skipped, so throughput /
+        # sim_min read None instead of another site's numbers - and a
+        # sandbox or ingest-key credential, which cannot read it, never
+        # turns the whole answer into a transport error.
         meta_rows = self._rows("fleet_meta", [("select", "*"), ("id", "eq.1")])
         unacked = self._rows("alerts", [("select", "*"), ("ack", "eq.false")])
 
