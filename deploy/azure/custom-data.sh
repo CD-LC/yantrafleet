@@ -345,8 +345,9 @@ systemctl enable --now yantra-detect yantra-notify yantra-sarathi
 # ---------------------------------------------------------------------------
 echo "== templating nginx site"
 NGINX_SERVER_NAME="${DOMAIN_NAME:-_}"
-export SUPABASE_URL SUPABASE_KEY YANTRA_SITE_ID NGINX_SERVER_NAME
-envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME}' \
+YANTRA_CAPTCHA_SITEKEY="${YANTRA_CAPTCHA_SITEKEY:-}"   # optional, public
+export SUPABASE_URL SUPABASE_KEY YANTRA_SITE_ID NGINX_SERVER_NAME YANTRA_CAPTCHA_SITEKEY
+envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME} ${YANTRA_CAPTCHA_SITEKEY}' \
     < "$APP_DIR/deploy/aws/nginx/yantrafleet.conf.template" \
     > /etc/nginx/sites-available/yantrafleet
 ln -sf /etc/nginx/sites-available/yantrafleet /etc/nginx/sites-enabled/yantrafleet

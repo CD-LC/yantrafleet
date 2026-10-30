@@ -384,7 +384,7 @@ sudo systemctl restart yantra-detect yantra-notify yantra-sarathi
 # re-render nginx from the (possibly changed) template with the boot-time values
 set -a; . /etc/yantrafleet.env; set +a
 export NGINX_SERVER_NAME="${DOMAIN_NAME:-_}"     # or your real domain, if you have one
-envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME}' \
+envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME} ${YANTRA_CAPTCHA_SITEKEY}' \
     < /opt/yantrafleet/deploy/aws/nginx/yantrafleet.conf.template \
     | sudo tee /etc/nginx/sites-available/yantrafleet >/dev/null
 sudo nginx -t && sudo systemctl reload nginx

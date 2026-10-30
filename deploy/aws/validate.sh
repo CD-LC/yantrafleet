@@ -30,16 +30,17 @@ export SUPABASE_URL="https://dummy.supabase.co"
 export SUPABASE_KEY="dummy-anon-key"
 export YANTRA_SITE_ID="TEST-SITE"
 export NGINX_SERVER_NAME="example.test"
+export YANTRA_CAPTCHA_SITEKEY="0xTESTSITEKEY0000000000"
 
 if command -v envsubst >/dev/null 2>&1; then
-    RENDERED="$(envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME}' < "$TEMPLATE")"
+    RENDERED="$(envsubst '${SUPABASE_URL} ${SUPABASE_KEY} ${YANTRA_SITE_ID} ${NGINX_SERVER_NAME} ${YANTRA_CAPTCHA_SITEKEY}' < "$TEMPLATE")"
     pass "envsubst dry-run of nginx template"
 else
     # envsubst (gettext-base) missing locally — same substitution in python.
     RENDERED="$(python3 - "$TEMPLATE" <<'PY'
 import os, sys
 text = open(sys.argv[1]).read()
-for var in ("SUPABASE_URL", "SUPABASE_KEY", "YANTRA_SITE_ID", "NGINX_SERVER_NAME"):
+for var in ("SUPABASE_URL", "SUPABASE_KEY", "YANTRA_SITE_ID", "NGINX_SERVER_NAME", "YANTRA_CAPTCHA_SITEKEY"):
     text = text.replace("${%s}" % var, os.environ[var])
 print(text)
 PY
