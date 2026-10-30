@@ -84,6 +84,7 @@
 <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'; form-action 'self'">
 <!-- Self-hosters with their own (non-supabase.co) backend host: list it so ?supa=/?auth=/?ask=/?door= overrides to it are honoured. -->
 <meta name="yf-allowed-hosts" content="">
+<meta name="yf-captcha-sitekey" content="">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Yantrika — Fleet Operations</title>
 <meta name="robots" content="noindex">
@@ -2591,6 +2592,41 @@ wireAcademyLink();
      - logout()/expire()      → clear state + localStorage, back to anon.
    Sync marks the backend auth-required on any 401 seen while anonymous and
    shows the sign-in modal exactly once (no crash/prompt loops). */
+/* CAPTCHA (Cloudflare Turnstile) for sign-up / sign-in. DORMANT until
+   <meta name="yf-captcha-sitekey" content="..."> carries the (public) site key:
+   with no key nothing loads and requests are unchanged. With a key, the widget
+   is mounted in the account modal and its one-time token rides along as
+   gotrue_meta_security.captcha_token, which Supabase verifies when CAPTCHA
+   protection is switched on under Authentication > Attack Protection. */
+const Captcha={
+  sitekey:((document.querySelector('meta[name="yf-captcha-sitekey"]')||{}).content||'').trim(),
+  token:null,wid:null,_p:null,
+  enabled(){return /^[0-9A-Za-z_-]{10,}$/.test(this.sitekey);},
+  _load(){
+    if(this._p)return this._p;
+    this._p=new Promise((res,rej)=>{
+      const s=document.createElement('script');
+      s.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';s.async=true;
+      s.onload=()=>res(window.turnstile);
+      s.onerror=()=>{this._p=null;rej(new Error('CAPTCHA could not load'));};
+      document.head.appendChild(s);});
+    return this._p;},
+  async mount(el){
+    if(!this.enabled()||!el)return;
+    try{const t=await this._load();
+      if(this.wid!=null){if(!this.token)t.reset(this.wid);return;}   // keep a solved token until it is spent
+      this.wid=t.render(el,{sitekey:this.sitekey,theme:'dark',
+        callback:k=>{this.token=k;},
+        'expired-callback':()=>{this.token=null;},
+        'error-callback':()=>{this.token=null;}});
+    }catch(e){}},
+  reset(){this.token=null;try{if(this.wid!=null&&window.turnstile)window.turnstile.reset(this.wid);}catch(e){}},
+  /** The body to POST: unchanged when CAPTCHA is off, else with the token (tokens are single-use). */
+  attach(body){
+    if(!this.enabled())return body;
+    if(!this.token)throw new Error('Please complete the CAPTCHA check first');
+    return Object.assign({},body,{gotrue_meta_security:{captcha_token:this.token}});}
+};
 const YFAuth={
   KEY:'yf_auth_v1',
   state:{jwt:null,refresh:null,email:null,role:null,site:null},
@@ -2613,11 +2649,14 @@ const YFAuth={
   NOAUTH_MSG:'Accounts need a real Supabase backend — you are on the local demo (loopback). Continue in demo mode.',
   async _authPost(path,body){
     let r;
+    const guarded=/^\/auth\/v1\/(signup|token\?grant_type=password)/.test(path);
+    if(guarded)body=Captcha.attach(body);
     try{
       r=await fetch(SUPA_URL+path,{method:'POST',
         headers:{'apikey':SUPA_KEY,'Content-Type':'application/json'},
         body:JSON.stringify(body)});
     }catch(e){const err=new Error(this.NOAUTH_MSG);err.noAuth=true;throw err;}
+    finally{if(guarded)Captcha.reset();}      // a CAPTCHA token is good for one request
     if(r.status===404){const err=new Error(this.NOAUTH_MSG);err.noAuth=true;throw err;}
     return r;
   },
@@ -2740,6 +2779,7 @@ const YFAuth={
       <label for="si-pass">Password</label><input id="si-pass" type="password" autocomplete="current-password">
       <label for="si-pass2" id="si-pass2-lbl" hidden>Confirm password</label>
       <input id="si-pass2" type="password" autocomplete="new-password" hidden>
+      <div id="si-captcha" style="margin:10px 0"></div>
       <div id="si-err"></div>
       <div id="si-msg"></div>
       <button class="btn primary" id="si-submit">Sign in</button>
@@ -2773,6 +2813,7 @@ const YFAuth={
     const mock=$('#si-mock');if(mock)mock.style.display=MOCK_MODE?'none':'';
     this.setMode(this.mode);
     $('#signin').classList.add('open');
+    Captcha.mount($('#si-captcha'));
     if(typeof Tour!=='undefined'&&Tour.on)Tour.done(false);   // never two overlays at once
     const em=$('#si-email');if(em)em.focus();
   },
