@@ -1,0 +1,9 @@
+# Required reviewers. Security-sensitive paths are listed explicitly so a
+# change to them cannot merge without the maintainer's eyes.
+*                       @punith-naga
+/supabase/              @punith-naga
+/core/yantracore/netguard.py @punith-naga
+/ops/yantraops/sandbox*.py   @punith-naga
+/deploy/                @punith-naga
+/.github/               @punith-naga
+/SECURITY.md            @punith-naga

@@ -142,3 +142,25 @@ def test_all_five_mqtt_fields_flow_through():
     assert params == {"host": "broker-c", "port": 8883,
                       "topic": "uagv/v2/+/+/other", "username": "svc",
                       "password": "secret"}
+
+
+# -- SSRF: an admin-edited broker host must not reach cloud metadata ---------
+
+
+def test_metadata_broker_host_is_refused_and_connection_kept():
+    manager, built = _manager()
+    live = LiveMqttConfig(
+        _table_poller([{"key": "CONNECTOR_MQTT_HOST", "value": "169.254.169.254"}]),
+        manager, FakeDeduper(), DEFAULTS)
+    assert live.poll_and_apply() is False
+    assert len(built) == 1 and not built[0].stopped      # old link untouched
+    assert manager.params["host"] == "broker-a"
+
+
+def test_lan_broker_host_is_still_allowed():
+    manager, built = _manager()
+    live = LiveMqttConfig(
+        _table_poller([{"key": "CONNECTOR_MQTT_HOST", "value": "10.20.0.5"}]),
+        manager, FakeDeduper(), DEFAULTS)
+    assert live.poll_and_apply() is True
+    assert manager.params["host"] == "10.20.0.5"

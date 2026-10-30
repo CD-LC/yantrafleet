@@ -10,6 +10,29 @@ URL = "https://example.test"
 
 
 @pytest.fixture(autouse=True)
+def _offline_dns(monkeypatch):
+    """The SSRF guard resolves webhook hosts; keep that offline. Every test
+    hostname maps to a public documentation address, and a name starting
+    ``internal.`` maps to a private one so the refusal path is testable."""
+    import yantracore.netguard as ng
+
+    import ipaddress
+
+    def fake(host: str, port: int) -> list[str]:
+        try:  # getaddrinfo returns an IP literal unchanged
+            return [str(ipaddress.ip_address(host))]
+        except ValueError:
+            pass
+        if host.startswith("internal."):
+            return ["10.0.0.5"]
+        if host.startswith("meta."):
+            return ["169.254.169.254"]
+        return ["93.184.216.34"]
+
+    monkeypatch.setattr(ng, "_default_resolve", fake)
+
+
+@pytest.fixture(autouse=True)
 def _clean_site_sync():
     """yantranotify.__main__.run() starts a live YANTRA_SITE_ID sync
     (yantracore.site.start_site_sync) on every call; without this, the

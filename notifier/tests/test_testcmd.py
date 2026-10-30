@@ -15,8 +15,10 @@ from yantranotify.__main__ import main, run_test_command
 
 
 @pytest.fixture()
-def hook_server():
-    """Local webhook stub recording every POST body."""
+def hook_server(monkeypatch):
+    """Local webhook stub recording every POST body. It lives on loopback,
+    which the SSRF guard refuses unless the operator opts in -- so opt in."""
+    monkeypatch.setenv("YANTRA_OUTBOUND_ALLOW_PRIVATE", "1")
     posts: list[dict] = []
 
     class Handler(BaseHTTPRequestHandler):

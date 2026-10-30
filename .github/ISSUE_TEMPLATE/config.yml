@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/CD-LC/yantrafleet/security/advisories/new
+    about: Private reporting only - do not open a public issue for a vulnerability.
+  - name: Read the docs first
+    url: https://github.com/CD-LC/yantrafleet/blob/main/SUPPORT.md
+    about: Where to get help, and what to include when you ask.

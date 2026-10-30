@@ -54,3 +54,38 @@ def test_http_error_is_swallowed_and_reported():
     client = httpx.Client(transport=httpx.MockTransport(boom))
     ch = WebhookChannel(url=HOOK, client=client)
     assert ch.send("hello") is False  # logged, not raised
+
+
+# --- SSRF guard (yantracore.netguard) ---------------------------------------
+
+def test_internal_webhook_target_is_refused_and_nothing_is_sent(rest: FakeRest, caplog):
+    ch = WebhookChannel(url="https://internal.corp/hook", client=rest.client())
+    assert ch.send("hi") is False
+    assert rest.requests == []
+    assert "SSRF guard" in caplog.text
+
+
+def test_metadata_webhook_target_is_refused(rest: FakeRest):
+    ch = WebhookChannel(url="https://meta.attacker.example/", client=rest.client())
+    assert ch.send("hi") is False
+    assert rest.requests == []
+
+
+def test_literal_metadata_ip_and_plain_http_refused(rest: FakeRest):
+    for url in ("http://169.254.169.254/latest/meta-data/",
+                "http://hooks.example.test/x", "https://127.0.0.1:8001/ask"):
+        assert WebhookChannel(url=url, client=rest.client()).send("x") is False
+    assert rest.requests == []
+
+
+def test_lan_webhook_allowed_only_with_operator_opt_in(rest: FakeRest, monkeypatch):
+    ch = WebhookChannel(url="https://internal.corp/hook", client=rest.client())
+    monkeypatch.setenv("YANTRA_OUTBOUND_ALLOW_HOSTS", "internal.corp")
+    rest.handler = lambda r: httpx.Response(200)  # type: ignore[assignment]
+    ch._client = httpx.Client(transport=httpx.MockTransport(rest.handler))
+    assert ch.send("hi") is True
+
+
+def test_default_client_never_follows_redirects():
+    ch = WebhookChannel(url="https://hooks.example.test/x")
+    assert ch._client.follow_redirects is False

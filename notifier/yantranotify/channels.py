@@ -21,8 +21,11 @@ import json
 import logging
 import os
 from typing import Protocol, Sequence
+from urllib.parse import quote
 
 import httpx
+
+from yantracore.netguard import UnsafeURL, check_outbound_url
 
 from .formats import (DEFAULT_FORMAT, digest_payload_for, payload_for,
                       render_digest_grouped)
@@ -102,7 +105,10 @@ class WebhookChannel:
         self.dry_run = dry_run
         self.fmt = (fmt or os.environ.get("WEBHOOK_FORMAT")
                     or DEFAULT_FORMAT).lower()
-        self._client = client or httpx.Client(timeout=timeout_s)
+        # Never follow a redirect: a vetted public URL must not be able to
+        # bounce the POST to an internal address (SSRF).
+        self._client = client or httpx.Client(timeout=timeout_s,
+                                              follow_redirects=False)
 
     @property
     def url(self) -> str | None:
@@ -125,6 +131,13 @@ class WebhookChannel:
             reason = "dry-run" if self.dry_run else "WEBHOOK_URL unset"
             print(f"[webhook {reason}] would POST {payload!r}")
             return True
+        # The URL is admin-editable (public.app_settings), so it is untrusted
+        # input to a server-side request: refuse internal / metadata targets.
+        try:
+            check_outbound_url(self.url)
+        except UnsafeURL as exc:
+            log.warning("webhook target refused (SSRF guard): %s", exc)
+            return False
         # Serialize once so the signature covers the exact bytes on the wire.
         body = json.dumps(payload, separators=(",", ":"),
                           ensure_ascii=False).encode("utf-8")
@@ -188,7 +201,8 @@ class WhatsAppChannel:
         self.settings = settings
         self.dry_run = dry_run
         self.api_base = api_base.rstrip("/")
-        self._client = client or httpx.Client(timeout=timeout_s)
+        self._client = client or httpx.Client(timeout=timeout_s,
+                                              follow_redirects=False)
 
     def _get(self, arg: str | None, env_key: str) -> str | None:
         if arg:
@@ -231,7 +245,10 @@ class WhatsAppChannel:
             reason = "dry-run" if self.dry_run else "creds unset"
             print(f"[whatsapp {reason}] would POST Messages.json {data!r}")
             return True
-        url = f"{self.api_base}/2010-04-01/Accounts/{self.sid}/Messages.json"
+        # sid is admin-editable and lands in the URL path: encode it so a
+        # crafted value cannot add path segments or a query string.
+        url = (f"{self.api_base}/2010-04-01/Accounts/"
+               f"{quote(self.sid, safe='')}/Messages.json")
         try:
             resp = self._client.post(url, data=data, auth=(self.sid, self.token))
             resp.raise_for_status()

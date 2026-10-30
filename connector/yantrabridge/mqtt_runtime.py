@@ -26,6 +26,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable
 
+from yantracore.netguard import UnsafeURL, check_host
+
 log = logging.getLogger("yantrabridge")
 
 #: The MQTT connection params tracked for a diff -> reconnect decision.
@@ -63,6 +65,18 @@ class MqttConnectionManager:
         applied. Returns True iff a reconnect actually happened."""
         new_params = dict(new_params)
         if new_params == self._params:
+            return False
+        # The host comes from public.app_config (admin-editable). A broker on
+        # the LAN is normal, so private ranges stay allowed; the cloud
+        # metadata / link-local range never is (SSRF -- see yantracore.netguard).
+        try:
+            check_host(str(new_params.get("host") or ""),
+                       int(new_params.get("port") or 1883),
+                       allow_private=True, require_resolution=False)
+        except UnsafeURL as exc:
+            log.warning("refusing mqtt broker config %s:%s: %s -- keeping the "
+                        "existing connection", new_params.get("host"),
+                        new_params.get("port"), exc)
             return False
         log.info(
             "mqtt broker config changed (%s:%s/%s -> %s:%s/%s) — reconnecting",

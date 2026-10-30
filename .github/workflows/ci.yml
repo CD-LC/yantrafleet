@@ -19,10 +19,11 @@ jobs:
   # a secret deleted in a later commit is still a leaked secret.
   secrets:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { fetch-depth: 0, persist-credentials: false }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: '3.12' }
       - name: Scanner self-test
         run: pip install pytest && python -m pytest scripts -q
@@ -34,15 +35,34 @@ jobs:
   # Known-vulnerable dependencies in what the services actually run.
   audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: '3.12' }
+      # filelock is only a transitive dependency (litellm -> huggingface-hub ->
+      # filelock). Every fix is in filelock 4.x but litellm pins filelock<4.0, so
+      # upgrading would break the LLM tier. These exact advisories are waived until
+      # litellm lifts the cap; anything NEW still fails this job.
       - name: pip-audit
         run: |
           pip install pip-audit
-          pip-audit -r copilot/requirements.txt -r e2e/requirements.txt
+          pip-audit -r copilot/requirements.txt -r e2e/requirements.txt \
+            --ignore-vuln CVE-2026-112907 \
+            --ignore-vuln CVE-2026-112908 \
+            --ignore-vuln CVE-2026-112909 \
+            --ignore-vuln CVE-2026-112910 \
+            --ignore-vuln CVE-2026-112911 \
+            --ignore-vuln CVE-2026-112912 \
+            --ignore-vuln CVE-2026-112913 \
+            --ignore-vuln CVE-2026-112915 \
+            --ignore-vuln CVE-2026-112935 \
+            --ignore-vuln CVE-2026-112936 \
+            --ignore-vuln CVE-2026-112938 \
+            --ignore-vuln CVE-2026-112939 \
+            --ignore-vuln CVE-2026-112940 \
+            --progress-spinner off
 
   # Every Python component with its own tests/ dir and pyproject.toml. Was
   # [core, sim, connector, copilot] only -- detector/notifier/ops never ran
@@ -53,20 +73,23 @@ jobs:
   # matrix's one-size-fits-all install step.
   python:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
+      fail-fast: false
       matrix:
         component: [core, sim, connector, copilot, detector, notifier, ops]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: '3.12' }
       - name: Install
         run: |
           pip install -e core
           if [ -f ${{ matrix.component }}/pyproject.toml ]; then pip install -e ${{ matrix.component }}; fi
           if [ -f ${{ matrix.component }}/requirements.txt ]; then pip install -r ${{ matrix.component }}/requirements.txt; fi
-          pip install pytest httpx
+          if [ "${{ matrix.component }}" = connector ]; then pip install 'mcap>=1.0'; fi
+          pip install pytest httpx mcap paho-mqtt
       - name: Test
         run: cd ${{ matrix.component }} && python -m pytest tests -q
 
@@ -78,14 +101,15 @@ jobs:
   # before this; 35 tests including 17 RBAC-enforcement (test_rbac_e2e.py).
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: '3.12' }
       - name: Install
         run: |
-          pip install -e core -e sim
+          pip install -e core -e sim -e connector -e detector -e ops
           pip install -r copilot/requirements.txt
           pip install -r e2e/requirements.txt
       - name: Test
@@ -100,12 +124,15 @@ jobs:
   # test suites need a headless Chromium via Playwright.
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with: { node-version: '22' }
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: { python-version: '3.12' }
       - name: Inline-script syntax checks
         run: |

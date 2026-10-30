@@ -77,3 +77,12 @@ def test_twilio_http_error_is_swallowed():
     client = httpx.Client(transport=httpx.MockTransport(boom))
     ch = WhatsAppChannel(client=client, **CREDS)
     assert ch.send("hi") is False
+
+
+def test_sid_cannot_inject_path_or_query(rest):
+    from yantranotify.channels import WhatsAppChannel
+    ch = WhatsAppChannel(sid="AC1/../../x?y=1#", token="t", from_="+1", to="+2",
+                         client=rest.client())
+    ch.send("hi")
+    sent = rest.twilio_posts[0].url
+    assert sent.raw_path == b"/2010-04-01/Accounts/AC1%2F..%2F..%2Fx%3Fy%3D1%23/Messages.json"

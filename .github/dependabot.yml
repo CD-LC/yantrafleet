@@ -5,12 +5,12 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
-  - package-ecosystem: pip
-    directory: /copilot
-    schedule: { interval: weekly }
-  - package-ecosystem: pip
-    directory: /e2e
-    schedule: { interval: weekly }
+    groups: { actions: { patterns: ["*"] } }
   - package-ecosystem: docker
     directory: /docker
     schedule: { interval: weekly }
+  # Every Python component declares its own dependencies.
+  - package-ecosystem: pip
+    directories: [/copilot, /e2e, /core, /sim, /connector, /detector, /notifier, /ops, /tools/conformance]
+    schedule: { interval: weekly }
+    groups: { python-deps: { patterns: ["*"], update-types: [minor, patch] } }

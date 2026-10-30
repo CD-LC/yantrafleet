@@ -1,0 +1,25 @@
+name: Bug report
+description: Something does not behave as documented
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes: { label: Version, description: "`python -m yantraops --version` or the git tag" }
+    validations: { required: true }
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options: [console, copilot, connector, detector, notifier, sim, ops, conformance tool, supabase SQL, deploy kit, docs]
+    validations: { required: true }
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: What you expected vs. what you saw }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes: { label: Steps to reproduce, description: A minimal command or MQTT capture is ideal }
+    validations: { required: true }
+  - type: textarea
+    id: logs
+    attributes: { label: Logs, description: "Redact keys, tokens and webhook URLs.", render: shell }

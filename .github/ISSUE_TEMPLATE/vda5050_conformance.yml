@@ -1,0 +1,22 @@
+name: VDA 5050 conformance question
+description: A check in yantra-conform is wrong, missing, or ambiguous
+labels: [vda5050, conformance]
+body:
+  - type: input
+    id: check
+    attributes: { label: Check id, placeholder: "e.g. actions.terminal_reported" }
+    validations: { required: true }
+  - type: input
+    id: clause
+    attributes: { label: Specification clause, description: "VDA 5050 version and section, e.g. v2.1.0 section 6.6.3" }
+    validations: { required: true }
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options: [False positive (compliant robot fails), False negative (non-compliant robot passes), Missing check, Unclear wording]
+    validations: { required: true }
+  - type: textarea
+    id: capture
+    attributes: { label: Evidence, description: "Anonymised MQTT capture or the exact message that triggers it", render: json }
+    validations: { required: true }
