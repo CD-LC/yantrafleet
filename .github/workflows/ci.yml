@@ -2,7 +2,48 @@ name: CI
 on:
   push: { branches: [main] }
   pull_request:
+
+# Least privilege: CI only ever reads the repo. A job that needs more must
+# say so itself. (Default GITHUB_TOKEN permissions can be read-write.)
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes the run still in flight.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # No credential may reach main. Stdlib-only scanner (scripts/secret_scan.py)
+  # so there is no third-party action in the trust path; full history, because
+  # a secret deleted in a later commit is still a leaked secret.
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0, persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Scanner self-test
+        run: pip install pytest && python -m pytest scripts -q
+      - name: Scan tracked files
+        run: python scripts/secret_scan.py
+      - name: Scan full git history
+        run: python scripts/secret_scan.py --history
+
+  # Known-vulnerable dependencies in what the services actually run.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r copilot/requirements.txt -r e2e/requirements.txt
+
   # Every Python component with its own tests/ dir and pyproject.toml. Was
   # [core, sim, connector, copilot] only -- detector/notifier/ops never ran
   # here, so their 193 tests (60+64+73 in TEST-REPORT.md) were never CI
@@ -17,6 +58,7 @@ jobs:
         component: [core, sim, connector, copilot, detector, notifier, ops]
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install
@@ -38,6 +80,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: Install
@@ -59,6 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { persist-credentials: false }
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - uses: actions/setup-python@v5

@@ -360,7 +360,10 @@ def test_console_link_returns_to_console_from_docroot(
     assert q["supa"] == [base]
     assert q["key"] == ["test"]
     assert q["site"] == ["BLR-DC1"]
-    assert q["token"] == ["tok-e2e"]
+    # The handoff still carried the token, but the destination scrubs it from the
+    # address bar (history / Referer / access logs) and keeps it in memory.
+    assert "token" not in q
+    assert console.evaluate("Copilot.SARATHI_TOKEN") == "tok-e2e"
 
 
 def test_backend_chip_offline_with_dead_backend(

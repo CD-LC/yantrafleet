@@ -558,7 +558,10 @@ def test_academy_link_navigates_with_params_from_docroot(
     assert q["supa"] == [base]
     assert q["key"] == ["test"]
     assert q["site"] == ["BLR-DC1"]
-    assert q["token"] == ["tok-e2e"]
+    # The handoff still carried the token, but the destination scrubs it from the
+    # address bar (history / Referer / access logs) and keeps it in memory.
+    assert "token" not in q
+    assert academy.evaluate("YFTutor.TOKEN") == "tok-e2e"
     # shared localStorage key => the academy opens already signed in
     expect(academy.locator("#auth-email")).to_contain_text(
         "operator@yf.test", timeout=15_000)

@@ -10,3 +10,20 @@ node_modules/
 .env
 *.log
 .claude/
+
+# --- secrets & local state: never commit these ---------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+*.tfstate
+*.tfstate.*
+yantrafleet*.env
+sandboxes.json
+.DS_Store
+.idea/
+.vscode/

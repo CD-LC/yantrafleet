@@ -75,6 +75,26 @@ limit_req_zone $binary_remote_addr zone=yantra_demo:10m rate=6r/m;
 # ---------------------------------------------------------------------------
 limit_req_zone $binary_remote_addr zone=yantra_ws:10m rate=30r/m;
 
+# ---------------------------------------------------------------------------
+# Content-Security-Policy, chosen per path (http-context `map`, hence here).
+#
+# console/ and academy/ are single-file apps whose script and style are
+# inline, so 'unsafe-inline' cannot be dropped for them. What the policy DOES
+# do is everything else: no <object>/<embed>, no <base> hijack, forms only to
+# ourselves, no framing by other sites, and - the one that matters when an XSS
+# slips through - connect-src pinned to this origin and the one configured
+# Supabase project, so injected script has nowhere to send a stolen session.
+#
+# The academy additionally allows its opt-in in-browser model (WebLLM): the
+# version-pinned module from two CDNs, WASM, and the weights from Hugging
+# Face / GitHub. Nothing loads from them until a learner opts in.
+# NOTE: no `$` may appear inside these strings (nginx would read a variable).
+# ---------------------------------------------------------------------------
+map $uri $yf_csp {
+    default "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${SUPABASE_URL}; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'";
+    ~^/academy/ "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://esm.run https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ${SUPABASE_URL} https://huggingface.co https://*.huggingface.co https://raw.githubusercontent.com https://cdn.jsdelivr.net https://esm.run; worker-src 'self' blob:; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'self'";
+}
+
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
@@ -87,10 +107,24 @@ server {
     gzip_types text/plain text/css application/json application/javascript
                text/javascript image/svg+xml;
 
-    # -- basic security headers -------------------------------------------
+    # Do not advertise the nginx version on error pages / the Server header.
+    server_tokens off;
+
+    # -- security headers --------------------------------------------------
+    # NOTE: nginx drops every inherited add_header in a block that declares
+    # its own, so none of the locations below may add one without repeating
+    # this whole list.
     add_header X-Content-Type-Options nosniff always;
     add_header X-Frame-Options SAMEORIGIN always;
-    add_header Referrer-Policy no-referrer-when-downgrade always;
+    # The console is reached with ?supa=&key=&site= (and sometimes a bearer
+    # token) in its URL; never hand that URL to another site as a Referer.
+    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Content-Security-Policy $yf_csp always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()" always;
+    add_header Cross-Origin-Opener-Policy same-origin always;
+    # Ignored by browsers over plain HTTP, so harmless on :80; once certbot
+    # clones this block onto :443 it pins the site to HTTPS for 180 days.
+    add_header Strict-Transport-Security "max-age=15552000" always;
 
     # -- marketing site (static landing/about/features/etc, at the bare
     #    host root) -----------------------------------------------------
@@ -126,6 +160,11 @@ server {
     location /console/ {
         root /opt/yantrafleet;
         try_files $uri $uri/ =404;
+        # The page only honours ?supa=/?auth= overrides for hosts it trusts
+        # (loopback, same origin, *.supabase.co). Tell it about the backend
+        # THIS box was configured with, so a custom-domain Supabase still works.
+        sub_filter '<meta name="yf-allowed-hosts" content="">' '<meta name="yf-allowed-hosts" content="${SUPABASE_URL}">';
+        sub_filter_once on;
     }
 
     # -- academy (static training app) ------------------------------------
@@ -141,6 +180,11 @@ server {
     location /academy/ {
         root /opt/yantrafleet;
         try_files $uri $uri/ =404;
+        # The page only honours ?supa=/?auth= overrides for hosts it trusts
+        # (loopback, same origin, *.supabase.co). Tell it about the backend
+        # THIS box was configured with, so a custom-domain Supabase still works.
+        sub_filter '<meta name="yf-allowed-hosts" content="">' '<meta name="yf-allowed-hosts" content="${SUPABASE_URL}">';
+        sub_filter_once on;
     }
 
     # -- docs (static docs site) ------------------------------------------

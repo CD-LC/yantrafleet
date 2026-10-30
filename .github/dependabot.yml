@@ -1,0 +1,16 @@
+# Keeps pinned CI actions and Python dependencies current, and raises
+# security advisories as PRs. Reviewed by a human before merge.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /copilot
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directory: /e2e
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directory: /docker
+    schedule: { interval: weekly }

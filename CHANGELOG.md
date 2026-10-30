@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased — security hardening
+- **Console/academy: backend trust gate.** `?supa=`, `?auth=`, `?ask=` and
+  `?door=` decide where a user's password, JWT and questions are sent, and a
+  crafted link could previously point them at any server. They are now honoured
+  only for loopback, the page's own origin, `https://*.supabase.co`, or a host
+  the operator lists in `<meta name="yf-allowed-hosts">` (nginx injects the
+  box's own `SUPABASE_URL` there, so custom domains keep working). Anything
+  else is ignored with a visible warning. `?key=` is only taken together with
+  a vetted `?supa=`; `?site=` must be a slug.
+- **Console: stored-XSS containment.** Table rows are defanged once at
+  `Sync.q()` (the single read path): characters that can open a tag, close an
+  attribute or break out of an `onclick="f('…')"` string are swapped for
+  look-alikes. In demo/sandbox modes strangers can write alert text, robot ids
+  and command notes, and ~190 template sites render them. Regression-tested
+  with hostile rows (verified to fail with the sanitizer removed).
+- **`?token=` no longer lingers in the URL.** The Sarathi bearer token is read
+  once and scrubbed from the address bar (history, Referer, nginx access log).
+- **Copilot: `POST /ask` rate limit** (`SARATHI_RATE_PER_MIN`, default 60 per
+  client) so an open endpoint cannot spend the operator's LLM quota;
+  `X-Forwarded-For` is trusted only for `SARATHI_TRUSTED_PROXY_HOPS` proxies
+  (the systemd unit sets 1). Optional `SARATHI_CORS_ORIGINS` allowlist.
+- **nginx template:** per-path `Content-Security-Policy` (connect-src pinned to
+  this origin + the configured Supabase project), HSTS, Permissions-Policy,
+  COOP, `server_tokens off`, and `Referrer-Policy: strict-origin-when-cross-origin`
+  (was `no-referrer-when-downgrade`, which sent `?key=&token=` URLs to other
+  https sites). Marketing pages carry a strict meta CSP.
+- **systemd:** kernel/cgroup/device protection, `RestrictAddressFamilies`,
+  `RestrictSUIDSGID`, `LockPersonality` on every unit.
+- **CI/repo:** least-privilege `GITHUB_TOKEN`, no persisted checkout
+  credentials, a stdlib secret scanner over the tree **and full git history**
+  (`scripts/secret_scan.py`), `pip-audit`, Dependabot, root `SECURITY.md`.
+  Hardened `.gitignore`/`.dockerignore`. Removed the stale
+  `yantrika-features.patch` and `_to_delete/` from the tree.
+
 ## v0.13.0 — 2026-10-21
 - **Yantrika Cloud: self-serve workspaces** (`supabase/0019_workspaces.sql`,
   OPT-IN). Creating an account now provisions a private workspace: a

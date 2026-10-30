@@ -17,3 +17,14 @@ scripts
 **/eval
 **/tests
 e2e/test_e2e.py
+
+# Never bake local secrets or editor/agent state into an image layer.
+.env
+.env.*
+*.pem
+*.key
+.claude
+.idea
+.vscode
+.DS_Store
+*.patch

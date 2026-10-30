@@ -79,6 +79,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<!-- Inline script/style are required by the single-file design; this pins the rest. The full policy (incl. connect-src) is sent by nginx. -->
+<meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'none'; form-action 'self'">
+<!-- Self-hosters with their own (non-supabase.co) backend host: list it so ?supa=/?auth=/?ask=/?door= overrides to it are honoured. -->
+<meta name="yf-allowed-hosts" content="">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Yantrika — Fleet Operations</title>
 <meta name="robots" content="noindex">
@@ -440,16 +445,40 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
                                  /ask when served from a real host)        */
 const _cfg=new URLSearchParams(location.search);
 const _hash=(location.hash||'').replace(/^#/,'').toLowerCase();
-const SUPA_URL=_cfg.get('supa')||'https://flwyvhsmgrrqpmhcqlzd.supabase.co';
-const SUPA_KEY=_cfg.get('key')||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
+/* BACKEND TRUST GATE. ?supa= ?ask= ?door= decide where this page sends the
+   user's password, their JWT and their questions, so a crafted link must
+   never be able to repoint them at a stranger's server. A URL override is
+   honoured only for: loopback, this page's own origin, https://*.supabase.co,
+   or a host the operator lists in <meta name="yf-allowed-hosts" content="a.com,b.com">.
+   Anything else is ignored (the default is used) and the user is told.
+   Cleartext http is accepted only for loopback / same-origin. */
+const _blockedCfg=[];
+const _vetUrl=(name,raw,fallback)=>{
+  if(raw==null||raw==='')return fallback;
+  let u;try{u=new URL(raw);}catch(e){_blockedCfg.push(name);return fallback;}
+  const h=u.hostname.toLowerCase();
+  const m=document.querySelector('meta[name="yf-allowed-hosts"]');
+  const extra=m?m.content.split(',').map(s=>s.trim().toLowerCase()).filter(Boolean).map(s=>{try{return new URL(s).hostname}catch(e){return s}}):[];
+  const loop=h==='localhost'||h==='127.0.0.1'||h==='[::1]'||h.endsWith('.localhost');
+  const same=u.origin===location.origin;
+  const ok=((loop||same)&&/^https?:$/.test(u.protocol))
+         ||(u.protocol==='https:'&&(/\.supabase\.(co|in)$/.test(h)||extra.includes(h)));
+  if(!ok){_blockedCfg.push(name);return fallback;}
+  return u.href.replace(/\/$/,'');
+};
+const _SUPA_DEFAULT='https://flwyvhsmgrrqpmhcqlzd.supabase.co';
+const SUPA_URL=_vetUrl('supa',_cfg.get('supa'),_SUPA_DEFAULT);
+// ?key= only travels with a vetted ?supa= — never pair a stranger's key with ours.
+const SUPA_KEY=(SUPA_URL!==_SUPA_DEFAULT&&!_blockedCfg.includes('supa')&&_cfg.get('key'))||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
 const MOCK_MODE=_cfg.get('mode')==='demo'||_cfg.get('demo')==='mock'||_hash==='demo'||_hash==='mock';
 const DEMO_TOKEN=(!MOCK_MODE&&/^[0-9a-f]{32,128}$/.test(_cfg.get('demo')||''))?_cfg.get('demo'):null;
-window.SITE=_cfg.get('site')||null;
+// A site id ends up in PostgREST filters and element ids: slug characters only.
+window.SITE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(_cfg.get('site')||'')?_cfg.get('site'):null;
 /* Served from a real host (nginx) the yantraops door and Sarathi sit on
    this same origin under /api/… and /ask; from file:// or a bare static
    server they are the loopback ports `yantraops up` prints. */
 const _served=/^https?:$/.test(location.protocol)&&!/^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-const DOOR_BASE=(_cfg.get('door')||(_served?location.origin:'http://localhost:8088')).replace(/\/$/,'');
+const DOOR_BASE=_vetUrl('door',_cfg.get('door'),_served?location.origin:'http://localhost:8088');
 /* Everything a workspace needs to know about its site: 'WS-…' from 0019
    (self-serve), 'DEMO-…' from 0009 (sandbox) or a legacy operator site. */
 const isWorkspaceSite=s=>/^WS-[0-9a-f]{8}$/i.test(String(s||''));
@@ -613,6 +642,22 @@ function pushAlert(sev,msg,src){
   return a;
 }
 function toast(m){const d=document.createElement('div');d.className='toast';d.textContent=m;$('#toasts').appendChild(d);setTimeout(()=>d.remove(),4200);}
+if(_blockedCfg.length)setTimeout(()=>toast('⚠ Ignored untrusted '+_blockedCfg.join(', ')+' override in the link — using the default backend.'),1200);
+/* INGRESS SANITIZER. Every table row comes from a database that, in demo and
+   sandbox modes, strangers can write to (alert text, robot ids, notes…), and a
+   lot of this file renders rows with template strings into innerHTML — some of
+   them inside onclick="f('${id}')" attributes. Rather than trusting every one
+   of those sites to escape, string values are defanged ONCE on the way in:
+   the characters that can open a tag, close an attribute or break out of a JS
+   string are swapped for look-alikes. Legitimate ids, timestamps and numbers
+   never contain them, so lookups are unaffected; prose just gets typographic
+   quotes. (Escaping at the sinks, esc()/Copilot.esc(), stays as a second layer.) */
+const _DEFANG={'&':'＆','<':'‹','>':'›','"':'”',"'":'’','`':'ˋ','\\':'＼'};
+const _defang=v=>{
+  if(typeof v==='string')return /[&<>"'`\\]/.test(v)?v.replace(/[&<>"'`\\]/g,c=>_DEFANG[c]):v;
+  if(Array.isArray(v))return v.map(_defang);
+  if(v&&typeof v==='object'){const o={};for(const k of Object.keys(v))o[k]=_defang(v[k]);return o;}
+  return v;};
 
 /* ---------------- Simulation tick ---------------- */
 let speedMult=1, tick=0;
@@ -1855,12 +1900,20 @@ const Copilot={
      /health on the same origin — a hardcoded localhost:8001 would be mixed
      content there and silently fall back to the local engine. ?ask= wins,
      then same-origin when served, then the localhost default. */
-  resolveUrls(){const o=_cfg.get('ask');
+  resolveUrls(){const o=_vetUrl('ask',_cfg.get('ask'),null);
     if(o){this.SARATHI_URL=o;this.SARATHI_HEALTH_URL=o.replace(/\/ask\/?$/,'')+'/health';}
     else if(_served){this.SARATHI_URL=location.origin+'/ask';this.SARATHI_HEALTH_URL=location.origin+'/health';}},
   /* ?token=<bearer> in the console URL → Authorization header on /ask + /health.
      No token → the header is omitted entirely (requests unchanged from before). */
-  SARATHI_TOKEN:new URLSearchParams(location.search).get('token')||null,
+  /* The token is read once and then scrubbed from the address bar: a bearer
+     secret left in the URL lands in browser history, Referer headers and the
+     web server's access log. sessionStorage keeps it across a reload. */
+  SARATHI_TOKEN:(()=>{let t=_cfg.get('token')||null;
+    try{if(t){sessionStorage.setItem('yf_sarathi_token',t);
+        const u=new URL(location.href);u.searchParams.delete('token');
+        history.replaceState(null,'',u.pathname+u.search+u.hash);}
+      else t=sessionStorage.getItem('yf_sarathi_token')||null;}catch(e){}
+    return t;})(),
   hdr(extra){
     const h=Object.assign({},extra||{});
     if(this.SARATHI_TOKEN)h['Authorization']='Bearer '+this.SARATHI_TOKEN;
@@ -2680,7 +2733,10 @@ const Sync={
         const err=new Error('HTTP 401');err.status=401;throw err;
       }
       if(!r.ok){const err=new Error('HTTP '+r.status);err.status=r.status;throw err;}
-      const txt=await r.text();return txt?JSON.parse(txt):null;
+      const txt=await r.text();if(!txt)return null;
+      const j=JSON.parse(txt);
+      // Table reads are defanged; rpc/ replies (workspace admin UI) are rendered through e() and carry emails/keys verbatim.
+      return String(path).startsWith('rpc/')?j:_defang(j);
     }catch(e){clearTimeout(t);throw e;}
   },
   setChip(){const d=$('#cloud-dot'),l=$('#cloud-lbl');if(!d)return;

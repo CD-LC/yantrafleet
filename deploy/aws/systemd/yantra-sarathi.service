@@ -10,12 +10,21 @@ Group=yantra
 EnvironmentFile=/etc/yantrafleet.env
 WorkingDirectory=/opt/yantrafleet/copilot
 Environment=PYTHONPATH=/opt/yantrafleet/copilot
+# nginx is the one trusted proxy in front of this: rate-limit the real client, not 127.0.0.1.
+Environment=SARATHI_TRUSTED_PROXY_HOPS=1
 ExecStart=/opt/yantrafleet/.venv/bin/python -m uvicorn sarathi.app:app --host 127.0.0.1 --port 8001
 Restart=always
 RestartSec=5
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+PrivateDevices=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 [Install]
 WantedBy=multi-user.target

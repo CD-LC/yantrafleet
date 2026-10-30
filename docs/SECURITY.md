@@ -4,6 +4,45 @@ Yantrika ships demo-open on purpose — one shared Supabase project,
 one client-safe key, zero setup. This page explains what that means,
 and the two opt-in lockdown levels for real deployments.
 
+## Forking, and going live: the checklist
+
+The repository embeds a **publishable** Supabase key and URL for the
+maintainers' demo project (see "Key classes" below). That is safe only
+while that project's row-level security is locked down, and it means a fork
+that changes nothing talks to the *maintainers'* database. So:
+
+1. **Use your own backend.** Create a Supabase project, then set
+   `SUPABASE_URL` / `SUPABASE_KEY` (or pass `?supa=&key=` to the console).
+   Do not ship a fork that points at someone else's project.
+2. **Apply the migrations that match your intent.** A project at
+   `0001`-`0005` is *demo-open*: anyone holding the publishable key can read,
+   write **and delete** every table. For real data run
+   `python -m yantraops migrate --db-url "<postgres-url>" --include-opt-in`
+   (RBAC and, if you want it, the sandbox/workspaces), then `grant-role`.
+3. **Prove it.** `python -m yantraops audit-security` probes the live
+   posture (it inserts and deletes one inert `audit-probe-…` alert row, so
+   run it against your own project only). Anything but PASS on the RLS check
+   means the project is still open.
+4. **Secrets stay server-side.** `service_role`, the database password,
+   `SARATHI_TOKEN`, webhook/Twilio/LLM keys go in `/etc/yantrafleet.env`
+   (`chmod 600`) or the admin settings panel - never in git, a URL, or a
+   browser. CI (`scripts/secret_scan.py`) refuses a commit that contains one.
+5. **Front it properly.** Terminate TLS (certbot), keep the shipped nginx
+   headers (CSP, HSTS, Referrer-Policy), set `SARATHI_TOKEN` if the copilot
+   is reachable by anyone you do not trust, and rate-limit Supabase Auth
+   sign-ups in the dashboard.
+
+### Client-side defences you get for free
+
+- **Backend trust gate** - a crafted `?supa=`/`?auth=`/`?ask=`/`?door=` link
+  cannot redirect credentials to a stranger's server. Only loopback, the
+  page's own origin, `https://*.supabase.co` and hosts named in
+  `<meta name="yf-allowed-hosts">` are honoured.
+- **Row defanging** - rows read from the database are neutralised at the
+  single read path before the console renders them, because in demo/sandbox
+  modes the people who can write those rows are strangers.
+- **No secrets in URLs** - `?token=` is scrubbed from the address bar.
+
 ## The three modes
 
 | | Demo (default) | Hardened (`0006_harden.sql`) | RBAC (`0007_rbac.sql`) |
