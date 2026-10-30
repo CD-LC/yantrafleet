@@ -21,7 +21,12 @@ def test_wipe_is_limited_to_objects_the_migrations_define():
     assert "yf_has_role" in funcs and triggers == ["yf_on_auth_user_created"]
     assert not {"users", "schema_migrations", "objects"} & set(tables)   # never auth/storage names
     sql = b.build()
-    assert "drop schema" not in sql.lower() and "truncate" not in sql.lower()
+    import re
+    low = sql.lower()
+    assert "drop schema" not in low
+    assert not re.search(r"^\s*truncate\b", low, re.M)             # a statement, not a privilege name
+    wipe = sql[sql.index("begin;"):sql.index("-- ---- 0001_init.sql")]   # code only, not the header prose
+    assert "auth." not in wipe.replace("drop trigger if exists yf_on_auth_user_created on auth.users;", "")
     assert sql.index("begin;") < sql.index("$wipe$") < sql.rindex("commit;")
 
 
