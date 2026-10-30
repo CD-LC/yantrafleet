@@ -9,7 +9,7 @@ pydantic>=2.6
 litellm>=1.40
 
 # MCP surface (sarathi.mcp_server) — official Model Context Protocol SDK.
-mcp>=1.9
+mcp>=2.3.0
 
 # Tests
 pytest>=8.0
