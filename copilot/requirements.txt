@@ -1,16 +1,16 @@
 # Core service
-fastapi>=0.110
-uvicorn>=0.29
-httpx>=0.27
-pydantic>=2.6
+fastapi>=0.162.0
+uvicorn>=0.54.0
+httpx>=0.28.1
+pydantic>=2.14.1
 
 # Tiers 1-2 only (LLM). The service and tests run without it if you only
 # need the offline tier — the import is lazy.
-litellm>=1.40
+litellm>=1.106.4
 
 # MCP surface (sarathi.mcp_server) — official Model Context Protocol SDK.
 # <2: the MCP test helpers (mcp.shared.memory) were removed in 2.x; move to 2.x together with the tests.
 mcp>=1.9,<2
 
 # Tests
-pytest>=8.0
+pytest>=9.1.1
