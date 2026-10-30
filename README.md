@@ -1,3 +1,22 @@
+<p align="center">
+  <a href="https://yantrika.ai">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="marketing/assets/brand/logo-horizontal-dark.svg">
+      <img src="marketing/assets/brand/logo-horizontal-light.svg" alt="Yantrika — AMR fleet management" width="320">
+    </picture>
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/CD-LC/yantrafleet/actions/workflows/ci.yml"><img src="https://github.com/CD-LC/yantrafleet/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2563c9" alt="License: MIT"></a>
+  <a href="SECURITY.md"><img src="https://img.shields.io/badge/security-policy-2563c9" alt="Security policy"></a>
+  <a href="docs/SECURITY.md#outbound-requests-and-ssrf"><img src="https://img.shields.io/badge/SSRF-guarded-2ea44f" alt="SSRF-guarded outbound requests"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/CD-LC/yantrafleet"><img src="https://api.scorecard.dev/projects/github.com/CD-LC/yantrafleet/badge" alt="OpenSSF Scorecard"></a>
+  <img src="https://img.shields.io/badge/python-3.12%2B-3776ab" alt="Python 3.12+">
+  <img src="https://img.shields.io/badge/VDA%205050-v2.1-2563c9" alt="VDA 5050 v2.1">
+</p>
+
 # Yantrika
 
 **v0.13.0** · 11 test suites, 700+ tests, all green · MIT license · hosted at [yantrika.ai](https://yantrika.ai)
@@ -181,6 +200,28 @@ project, or it refuses to start (nothing falls back to the maintainers' project
 unless you set `YANTRA_ALLOW_DEMO_BACKEND=1`). `--loopback` needs neither. Copilot LLM tiers activate with
 `GEMINI_API_KEY` or `OPENAI_API_KEY` (or `SARATHI_MODEL`); without a key it
 serves grounded template answers (`tier: offline`).
+
+## Security
+
+Secure by default; every opt-out is explicit and named.
+
+- **RLS-locked backend.** Anonymous visitors read and write nothing; roles
+  (`operator` < `engineer` < `manager` < `admin`) are enforced in Postgres, not
+  in the UI. The only anonymous write paths are a throwaway `DEMO-*` sandbox and
+  per-workspace ingest keys, each pinned to a single site.
+- **SSRF-guarded outbound requests.** Webhook and MQTT targets that an admin can
+  edit are resolved and refused if they point at metadata, loopback or private
+  ranges (`core/yantracore/netguard.py`, [details](docs/SECURITY.md#outbound-requests-and-ssrf)).
+- **Fail-closed configuration.** No silent fallback to someone else's database;
+  the copilot needs a token unless you opt in to anonymous access.
+- **Hardened front-ends.** Backend-redirect gate for URL overrides, row
+  sanitising against stored XSS, CSP/HSTS headers, optional Turnstile CAPTCHA on
+  sign-up.
+- **Supply chain.** Secret scan over the tree and full history in CI, dependency
+  audit, CodeQL, OpenSSF Scorecard, Dependabot, least-privilege CI tokens.
+
+Found a vulnerability? See [SECURITY.md](SECURITY.md) (private reporting).
+Hardening a fork or going live: [docs/SECURITY.md](docs/SECURITY.md).
 
 ## Tests
 
