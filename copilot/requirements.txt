@@ -2,7 +2,7 @@
 fastapi>=0.110
 uvicorn>=0.29
 httpx>=0.27
-pydantic>=2.6
+pydantic>=2.14.1
 
 # Tiers 1-2 only (LLM). The service and tests run without it if you only
 # need the offline tier — the import is lazy.
