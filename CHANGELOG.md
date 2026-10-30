@@ -28,6 +28,12 @@
   https sites). Marketing pages carry a strict meta CSP.
 - **systemd:** kernel/cgroup/device protection, `RestrictAddressFamilies`,
   `RestrictSUIDSGID`, `LockPersonality` on every unit.
+- **One-paste schema rebuild** (`scripts/build_full_schema.py` -> `supabase/oneshot/full-schema.sql`,
+  git-ignored): wipes only the objects the migrations define, then applies
+  0001-0019 (0006 superseded by 0007) in one transaction. Verified on Postgres 16 with
+  Supabase-style roles: runs on a blank DB and again over data, and ends locked down
+  (anon reads nothing, writes nothing; signup provisions a workspace + admin).
+- **Fleet data copy script** (`scripts/copy_demo_data.py`) - see its docstring.
 - **CI/repo:** least-privilege `GITHUB_TOKEN`, no persisted checkout
   credentials, a stdlib secret scanner over the tree **and full git history**
   (`scripts/secret_scan.py`), `pip-audit`, Dependabot, root `SECURITY.md`.
