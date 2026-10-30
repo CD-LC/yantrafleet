@@ -89,8 +89,8 @@ jobs:
           if [ -f ${{ matrix.component }}/pyproject.toml ]; then pip install -e ${{ matrix.component }}; fi
           if [ -f ${{ matrix.component }}/requirements.txt ]; then pip install -r ${{ matrix.component }}/requirements.txt; fi
           if [ "${{ matrix.component }}" = connector ]; then pip install 'mcap>=1.0'; fi
-          # ops tests drive the sibling packages (sim, bridge, detector, notifier) end to end
-          if [ "${{ matrix.component }}" = ops ]; then pip install -e sim -e connector -e detector -e notifier; fi
+          # ops tests drive the sibling packages and start the real copilot (loopback smoke, doctor)
+          if [ "${{ matrix.component }}" = ops ]; then pip install -e sim -e connector -e detector -e notifier -r copilot/requirements.txt; fi
           pip install pytest httpx mcap paho-mqtt
       - name: Test
         run: cd ${{ matrix.component }} && python -m pytest tests -q
