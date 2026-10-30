@@ -116,6 +116,8 @@ jobs:
           if [ "${{ matrix.component }}" = connector ]; then pip install 'mcap>=1.0'; fi
           # ops tests drive the sibling packages and start the real copilot (loopback smoke, doctor)
           if [ "${{ matrix.component }}" = ops ]; then pip install -e sim -e connector -e detector -e notifier -r copilot/requirements.txt; fi
+          # the conformance tests grade this repo's own simulator
+          if [ "${{ matrix.component }}" = tools/conformance ]; then pip install -e sim; fi
           pip install pytest pytest-cov httpx mcap paho-mqtt
       # Coverage floors sit a little below today's measured numbers (core 96,
       # sim 95, detector 94, notifier 96, conformance 90, copilot 86,
