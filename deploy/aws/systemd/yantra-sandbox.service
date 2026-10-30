@@ -39,6 +39,12 @@ Type=simple
 User=yantra
 Group=yantra
 EnvironmentFile=/etc/yantrafleet.env
+# Least privilege: the door answers ANONYMOUS traffic, so it must run on the
+# publishable (anon) key even when /etc/yantrafleet.env carries a service_role
+# key for the writers (detector, notifier, copilot). Put just
+#   SUPABASE_KEY=<publishable key>
+# in this optional file; it is read second, so it wins for this unit only.
+EnvironmentFile=-/etc/yantrafleet-door.env
 WorkingDirectory=/opt/yantrafleet
 StateDirectory=yantrafleet
 ExecStart=/opt/yantrafleet/.venv/bin/python -m yantraops sandbox-serve \
