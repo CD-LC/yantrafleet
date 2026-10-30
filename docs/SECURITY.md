@@ -229,6 +229,34 @@ public sign-ups (Authentication → Providers → Email) or leave them on
 and rely on the fact that a fresh user has no `user_roles` row and can
 see nothing until an admin grants a role.
 
+## Outbound requests and SSRF
+
+Three outbound targets are controlled by data, not by the deployer, because a
+console `admin` can edit them live: the notifier's `WEBHOOK_URL` and Twilio
+credentials (`public.app_settings`), and the connector's
+`CONNECTOR_MQTT_HOST` (`public.app_config`). Treat them as untrusted input to a
+server-side request. `core/yantracore/netguard.py` is the single choke point:
+
+| Rule | Webhook | MQTT host |
+|---|---|---|
+| scheme | `https`; `http` only to an opted-in host | n/a |
+| `user:pass@` in URL | refused | n/a |
+| link-local / cloud metadata (`169.254.0.0/16`, `fd00:ec2::254`, `100.100.100.200`, ...) | **always refused** | **always refused** |
+| private / loopback / CGNAT / ULA | refused unless opted in | allowed (brokers live on LANs) |
+| redirects | never followed | n/a |
+| name that will not resolve | refused (fail closed) | tolerated (nothing can connect) |
+
+Every address a name resolves to must pass, so `2130706433`, `[::ffff:127.0.0.1]`
+and `169.254.169.254.nip.io` are judged by where they point. To send to an
+internal chat server: `YANTRA_OUTBOUND_ALLOW_HOSTS=chat.corp.lan` (preferred) or
+`YANTRA_OUTBOUND_ALLOW_PRIVATE=1`. Metadata addresses stay blocked either way.
+
+**Known limit:** the name is resolved once to vet it and again by the HTTP
+client to connect, so a hostile DNS server could answer differently the second
+time (rebinding). Close it at the network layer too: IMDSv2 with hop limit 1 (or
+a metadata firewall rule) and an egress policy on the notifier host. New code that
+makes a request to a configurable target **must** call `check_outbound_url`.
+
 ## Environment variables
 
 | Variable | Used by | Meaning |

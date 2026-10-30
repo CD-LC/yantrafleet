@@ -8,8 +8,34 @@ Use GitHub's private reporting instead:
 **Security tab → "Report a vulnerability"** on this repository.
 Include what you found, how to reproduce it, and the impact you expect.
 
-You can expect an acknowledgement within a few days. Please give us a
-reasonable window to ship a fix before disclosing publicly.
+## What to expect
+
+| Step | Target |
+|---|---|
+| Acknowledgement | 3 working days |
+| Triage and severity (CVSS v3.1/v4) | 7 days |
+| Fix or mitigation for High/Critical | 30 days |
+| Public advisory + CVE (via GitHub) | on release of the fix |
+
+Please allow up to 90 days before public disclosure; we will tell you if we
+need longer and why. Reporters are credited in the advisory unless they ask
+not to be. **Safe harbour:** good-faith research against *your own* deployment
+or the documented loopback/demo stack, without exfiltrating data, degrading
+service, or touching other people's workspaces, will not be pursued legally.
+Do not test against the hosted demo project at volume.
+
+## Supported versions
+
+Security fixes go to the latest released minor version (`v0.x` while the
+project is pre-1.0) and to `main`. Older minors are not patched; upgrade.
+
+## Classes of issue we treat as vulnerabilities
+
+Authentication/authorisation bypass (RLS, RBAC, the sandbox door, ingest keys),
+injection and XSS in the console, **server-side request forgery** (every
+admin-editable outbound target goes through `yantracore.netguard`), secret
+exposure, command-gate bypass (a robot-affecting action that skips the
+`commands` approval), and supply-chain weaknesses in CI or the install scripts.
 
 ## Scope
 

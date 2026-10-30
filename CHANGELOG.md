@@ -1,6 +1,27 @@
 # Changelog
 
 ## Unreleased — security hardening
+- **SSRF guard (`yantracore.netguard`).** `WEBHOOK_URL`, the Twilio credentials
+  and `CONNECTOR_MQTT_HOST` are editable by a console admin through
+  `app_settings` / `app_config`, so they are untrusted input to a *server-side*
+  request. Webhook targets must now be `https`, carry no `user:pass@`, and
+  resolve only to public addresses (every A/AAAA record is checked, so numeric
+  and IPv4-mapped spellings and DNS names pointing inward are refused); redirects
+  are never followed. Link-local / cloud-metadata addresses are refused
+  unconditionally, including for the MQTT broker host (LAN brokers stay allowed).
+  Self-hosters with an internal webhook opt in per host
+  (`YANTRA_OUTBOUND_ALLOW_HOSTS`) or globally (`YANTRA_OUTBOUND_ALLOW_PRIVATE=1`).
+  The Twilio account SID is now percent-encoded into the request path.
+  **Behaviour change:** a webhook to a private/loopback/http target stops
+  delivering until the operator opts in. Residual DNS-rebinding window is
+  documented in the module and in `docs/SECURITY.md`.
+- **Repo/CI:** all Actions pinned to commit SHAs; CodeQL (`security-extended`),
+  OpenSSF Scorecard and dependency-review workflows; Dependabot now covers every
+  component; per-job timeouts; the connector CI job now installs `mcap` and
+  `paho-mqtt` so its import/MQTT tests run instead of erroring. Added
+  `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `SUPPORT.md`, `.github/CODEOWNERS`,
+  issue/PR templates (including a VDA 5050 conformance-dispute form), and a
+  response-time / safe-harbour policy in `SECURITY.md`.
 - **Console/academy: backend trust gate.** `?supa=`, `?auth=`, `?ask=` and
   `?door=` decide where a user's password, JWT and questions are sent, and a
   crafted link could previously point them at any server. They are now honoured
