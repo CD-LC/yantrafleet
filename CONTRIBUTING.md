@@ -41,7 +41,18 @@ basenames collide across components):
 | console | `console/` | `python -m pytest tests -q` | static checks (need Node for the inline-script syntax pass) **+ Playwright/Chromium browser tests** — install `playwright pytest-playwright`, then either `python -m playwright install chromium` or point `PLAYWRIGHT_BROWSERS_PATH` at a preinstalled cache (e.g. `PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers python -m pytest tests -q`). The browser tests skip themselves cleanly when no Chromium is available. |
 | e2e | `e2e/` | `python -m pytest tests -q` | full stack over localhost HTTP vs the fake PostgREST |
 
-Before pushing, run every suite you touched plus e2e, and:
+Before pushing, run every suite you touched plus e2e. CI also enforces, so run
+them locally to save a round trip:
+
+```bash
+ruff check .                      # lint + security rules (ruff.toml)
+mypy core/yantracore sim/yantrasim connector/yantrabridge detector/yantradetect \
+     notifier/yantranotify tools/conformance/yantraconform
+python -m pytest tests --cov=<package> --cov-fail-under=<floor>   # floors in ci.yml
+```
+
+New code that renders into the console must go through `esc()`; new code that
+calls a configurable URL must call `yantracore.netguard`. Then:
 
 ```bash
 node scripts/check_console.mjs

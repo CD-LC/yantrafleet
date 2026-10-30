@@ -299,7 +299,8 @@ def check_sarathi_token(env: Mapping[str, str]) -> Check:
         return Check(PASS, "sarathi-token",
                      "SARATHI_TOKEN set — /ask requires bearer auth")
     return Check(WARN, "sarathi-token",
-                 "SARATHI_TOKEN unset — the copilot /ask endpoint is open",
+                 "SARATHI_TOKEN unset — /ask is closed (401) unless "
+                 "SARATHI_ALLOW_OPEN=1 makes it anonymous",
                  fix="export SARATHI_TOKEN=$(openssl rand -hex 32) and "
                      "restart sarathi")
 

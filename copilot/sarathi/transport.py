@@ -33,7 +33,7 @@ class Transport(abc.ABC):
         """Return rows of ``table`` filtered by PostgREST query params."""
         raise NotImplementedError
 
-    def close(self) -> None:  # pragma: no cover - trivial default
+    def close(self) -> None:  # noqa: B027  # pragma: no cover - optional hook, not abstract
         """Release any underlying resources."""
 
 

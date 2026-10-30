@@ -32,6 +32,31 @@ jobs:
       - name: Scan full git history
         run: python scripts/secret_scan.py --history
 
+  # Style/bug/security lint (ruff, incl. bandit rules) and static types (mypy).
+  # Configs: ruff.toml, mypy.ini. copilot/ and ops/ still have typing debt
+  # (about 16 findings), so mypy reports on them without failing the build.
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: '3.12' }
+      - name: Install
+        run: |
+          pip install ruff mypy httpx fastapi pydantic
+          pip install -e core -e sim -e connector -e detector -e notifier -e ops -e tools/conformance
+      - name: ruff
+        run: ruff check .
+      - name: mypy (blocking)
+        run: >
+          mypy core/yantracore sim/yantrasim connector/yantrabridge
+          detector/yantradetect notifier/yantranotify tools/conformance/yantraconform
+      - name: mypy (informational)
+        continue-on-error: true
+        run: mypy copilot/sarathi ops/yantraops
+
   # Known-vulnerable dependencies in what the services actually run.
   audit:
     runs-on: ubuntu-latest
@@ -77,7 +102,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        component: [core, sim, connector, copilot, detector, notifier, ops]
+        component: [core, sim, connector, copilot, detector, notifier, ops, tools/conformance]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with: { persist-credentials: false }
@@ -91,9 +116,24 @@ jobs:
           if [ "${{ matrix.component }}" = connector ]; then pip install 'mcap>=1.0'; fi
           # ops tests drive the sibling packages and start the real copilot (loopback smoke, doctor)
           if [ "${{ matrix.component }}" = ops ]; then pip install -e sim -e connector -e detector -e notifier -r copilot/requirements.txt; fi
-          pip install pytest httpx mcap paho-mqtt
+          pip install pytest pytest-cov httpx mcap paho-mqtt
+      # Coverage floors sit a little below today's measured numbers (core 96,
+      # sim 95, detector 94, notifier 96, conformance 90, copilot 86,
+      # connector 77 without the optional extras): they stop regressions, they
+      # are not a target. ops spawns real subprocesses, so it is not measured.
       - name: Test
-        run: cd ${{ matrix.component }} && python -m pytest tests -q
+        run: |
+          case "${{ matrix.component }}" in
+            core) pkg=yantracore; floor=90 ;;
+            sim) pkg=yantrasim; floor=90 ;;
+            connector) pkg=yantrabridge; floor=75 ;;
+            copilot) pkg=sarathi; floor=80 ;;
+            detector) pkg=yantradetect; floor=90 ;;
+            notifier) pkg=yantranotify; floor=90 ;;
+            tools/conformance) pkg=yantraconform; floor=85 ;;
+            ops) pkg=yantraops; floor=0 ;;
+          esac
+          cd ${{ matrix.component }} && python -m pytest tests -q --cov=$pkg --cov-report=term --cov-fail-under=$floor
 
   # Offline end-to-end harness (fakerest.py in-process fake PostgREST): needs
   # core + sim installed editable, copilot's own requirements.txt (sarathi is

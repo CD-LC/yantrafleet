@@ -86,9 +86,9 @@ def _call(url: str, key: str, method="GET", body=None, headers=None):
     h = {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     h.update(headers or {})
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(url, data=data, method=method, headers=h)
+    req = urllib.request.Request(url, data=data, method=method, headers=h)  # noqa: S310 (operator-supplied URL)
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=60) as r:  # noqa: S310
             raw = r.read()
             return r.status, dict(r.headers), (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as e:
@@ -150,7 +150,7 @@ def main(argv=None) -> int:
                 continue
         ok, skipped, buf = 0, 0, []
 
-        def flush():
+        def flush(table=table, conflict=conflict):
             nonlocal ok, buf
             if not buf:
                 return

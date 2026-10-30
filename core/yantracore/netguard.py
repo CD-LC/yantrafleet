@@ -80,7 +80,7 @@ def _truthy(value: str | None) -> bool:
 
 def _default_resolve(host: str, port: int) -> list[str]:
     infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    return [info[4][0] for info in infos]
+    return [str(info[4][0]) for info in infos]
 
 
 def _host_allowed(host: str, allow_hosts: Iterable[str] | None) -> bool:

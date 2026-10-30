@@ -16,7 +16,6 @@ An injectable :class:`httpx.Client` keeps every test offline
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,18 +23,17 @@ import httpx
 
 from yantracore import site_id as _default_site_id
 
-DEFAULT_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
-DEFAULT_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
+from yantracore.backend import DEMO_KEY as DEFAULT_KEY  # noqa: E402,F401  (re-export; opt-in only)
+from yantracore.backend import DEMO_URL as DEFAULT_URL  # noqa: E402,F401
+from yantracore.backend import resolve_backend  # noqa: E402,F401
 
 NOTIFY_SEVERITIES = ("crit", "serious")
 
 
 def resolve_config(url: str | None = None, key: str | None = None) -> tuple[str, str]:
-    """Precedence: explicit arg > env var > embedded default."""
-    return (
-        (url or os.environ.get("SUPABASE_URL") or DEFAULT_URL).rstrip("/"),
-        key or os.environ.get("SUPABASE_KEY") or DEFAULT_KEY,
-    )
+    """Precedence: explicit arg > env var. Fails closed (BackendNotConfigured)
+    unless ``YANTRA_ALLOW_DEMO_BACKEND=1`` -- see :mod:`yantracore.backend`."""
+    return resolve_backend(url, key)
 
 
 @dataclass(frozen=True)

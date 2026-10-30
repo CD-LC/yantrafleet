@@ -34,8 +34,9 @@ import httpx
 log = logging.getLogger(__name__)
 
 # Client-safe publishable anon key — fine to embed; override via env vars.
-DEFAULT_SUPABASE_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
-DEFAULT_SUPABASE_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
+from yantracore.backend import DEMO_KEY as DEFAULT_SUPABASE_KEY  # noqa: E402,F401  (re-export; opt-in only)
+from yantracore.backend import DEMO_URL as DEFAULT_SUPABASE_URL  # noqa: E402,F401
+from yantracore.backend import resolve_backend  # noqa: E402,F401
 
 #: 0019 ingest-key contract (public.yf_ingest_key / yf_is_workspace_site).
 #: Duplicated here rather than imported: the connector is a standalone
@@ -157,8 +158,7 @@ class SupabaseSink:
         ingest_key: str | None = None,
         site: str | None = None,
     ) -> None:
-        self.url = (url or os.environ.get("SUPABASE_URL") or DEFAULT_SUPABASE_URL).rstrip("/")
-        self.key = key or os.environ.get("SUPABASE_KEY") or DEFAULT_SUPABASE_KEY
+        self.url, self.key = resolve_backend(url, key)
         self.writer_id = writer_id
         self.ingest_key = resolve_ingest_key(ingest_key)
         self.site = (site or os.environ.get("YANTRA_SITE_ID") or "").strip() or None

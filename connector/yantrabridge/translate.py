@@ -54,7 +54,7 @@ def _slug(text: str) -> str:
 
 def _short_hash(*parts: str) -> str:
     """Deterministic 6-hex-char hash used to keep alert ids unique."""
-    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:6]
+    return hashlib.sha1("|".join(parts).encode("utf-8"), usedforsecurity=False).hexdigest()[:6]
 
 
 def _tlabel(timestamp: str | None) -> str:

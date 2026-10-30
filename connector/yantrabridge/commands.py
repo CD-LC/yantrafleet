@@ -54,8 +54,8 @@ from typing import Any, Callable
 
 import httpx
 
-from yantrabridge.sink import (DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL,
-                               INGEST_KEY_HEADER, check_ingest_config,
+from yantracore.backend import resolve_backend
+from yantrabridge.sink import (INGEST_KEY_HEADER, check_ingest_config,
                                resolve_ingest_key, strip_namespace)
 
 log = logging.getLogger(__name__)
@@ -175,9 +175,7 @@ class CommandPublisher:
         else:
             log.info("command gate: only approved commands at site %r will "
                      "be published", self.site)
-        resolved_url = (url or os.environ.get("SUPABASE_URL")
-                        or DEFAULT_SUPABASE_URL).rstrip("/")
-        resolved_key = key or os.environ.get("SUPABASE_KEY") or DEFAULT_SUPABASE_KEY
+        resolved_url, resolved_key = resolve_backend(url, key)
         headers = {
             "apikey": resolved_key,
             "Authorization": f"Bearer {resolved_key}",

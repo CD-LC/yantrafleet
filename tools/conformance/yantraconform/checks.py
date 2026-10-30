@@ -466,7 +466,7 @@ def _state_timestamp_format(cs, obs):
     if not obs.states:
         return cs.result("skip", "no state message observed")
     problems, offenders = [], 0
-    for i, p in enumerate(_payloads(obs.states)):
+    for p in _payloads(obs.states):
         problem = spec.timestamp_problem(p.get("timestamp"))
         if problem:
             offenders += 1

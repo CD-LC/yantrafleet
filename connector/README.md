@@ -44,12 +44,15 @@ python -m yantrabridge --file sample.jsonl
 python -m yantrabridge --mqtt-host broker.local --mqtt-port 1883
 ```
 
-Configuration (env vars override the embedded client-safe defaults):
+Configuration. There is **no built-in backend**: set both variables (or the
+flags), or the connector exits with an error rather than writing your fleet's
+telemetry into someone else's database.
 
 | Env var | Default |
 |---|---|
-| `SUPABASE_URL` | `https://mqrffzpaeqtngxcpttyx.supabase.co` |
-| `SUPABASE_KEY` | embedded publishable anon key (client-safe) |
+| `SUPABASE_URL` | required |
+| `SUPABASE_KEY` | required (publishable/anon key, or an ingest key for workspace mode) |
+| `YANTRA_ALLOW_DEMO_BACKEND` | `1` opts in to the maintainers' public demo project (warns loudly) |
 
 Flags: `--battery-threshold` (default 20%), `--mqtt-topic`, `--mqtt-username`,
 `--mqtt-password`, `--supabase-url`, `--supabase-key`.

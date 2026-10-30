@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 # Client-safe defaults for the Yantrika demo project.
-DEFAULT_SUPABASE_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
-DEFAULT_SUPABASE_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
+from yantracore.backend import DEMO_KEY as DEFAULT_SUPABASE_KEY  # noqa: E402,F401  (re-export; opt-in only)
+from yantracore.backend import DEMO_URL as DEFAULT_SUPABASE_URL  # noqa: E402,F401
+from yantracore.backend import resolve_backend  # noqa: E402,F401
 
 # Default models per provider (free-tier friendly).
 DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"
@@ -62,8 +63,9 @@ def resolve_model(get: Callable[[str], str | None]) -> str | None:
 
 def load_settings() -> Settings:
     """Build Settings from the current process environment."""
+    supabase_url, supabase_key = resolve_backend()
     return Settings(
-        supabase_url=os.environ.get("SUPABASE_URL", DEFAULT_SUPABASE_URL).rstrip("/"),
-        supabase_key=os.environ.get("SUPABASE_KEY", DEFAULT_SUPABASE_KEY),
+        supabase_url=supabase_url,
+        supabase_key=supabase_key,
         model=resolve_model(os.environ.get),
     )

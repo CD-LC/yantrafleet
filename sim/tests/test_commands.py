@@ -121,7 +121,7 @@ class TestPoller:
         assert "unknown robot" in bodies["c-2"]["note"]
 
     def test_poll_survives_network_failure(self):
-        sim = make_sim()
+        make_sim()
 
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectError("no route")

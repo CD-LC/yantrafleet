@@ -57,9 +57,10 @@ issues in third-party services (Supabase, Twilio, LLM providers).
 | `SARATHI_TOKEN`, `YANTRA_WEBHOOK_SECRET`, `GEMINI_API_KEY`, Twilio credentials | **Yes** | Env file (`chmod 600`) or the admin settings panel. |
 | Workspace ingest keys (`yk_…`) | **Yes** | Per-workspace bearer secret; hashed at rest, shown once, revocable. |
 
-If you **fork** this repository: the embedded default Supabase project is the
-maintainers' demo backend. Point your fork at **your own** project
-(`SUPABASE_URL` / `SUPABASE_KEY`) before putting real data anywhere, and read
+If you **fork** this repository: no component has a built-in backend any more;
+each exits with an error until you set **your own** project
+(`SUPABASE_URL` / `SUPABASE_KEY`). The maintainers' public demo project is used
+only if you set `YANTRA_ALLOW_DEMO_BACKEND=1`. Read
 [`docs/SECURITY.md`](docs/SECURITY.md) for the demo / hardened / RBAC modes.
 Never commit a `.env` file; `.gitignore` and the CI secret scan are there to
 catch mistakes, not to excuse them.

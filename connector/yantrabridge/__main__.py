@@ -39,8 +39,8 @@ from typing import Any
 
 import httpx
 
-from yantrabridge.sink import (DEFAULT_SUPABASE_KEY, DEFAULT_SUPABASE_URL,
-                               SupabaseSink, check_ingest_config,
+from yantracore.backend import resolve_backend
+from yantrabridge.sink import (SupabaseSink, check_ingest_config,
                                resolve_ingest_key)
 from yantrabridge.sources import DEFAULT_STATE_TOPIC, MqttSource, read_jsonl
 from yantrabridge.translate import (
@@ -205,7 +205,7 @@ def run_import(argv: list[str]) -> int:
                         sink.insert_telemetry([ev.telemetry_row])
                     if ev.alert_rows:
                         sink.insert_alerts(ev.alert_rows)
-                    if ev.robot_row is not None:
+                    if ev.robot_row is not None and ev.telemetry_row is not None:
                         print(f"[{ev.robot_row['id']}] "
                               f"ts={ev.telemetry_row['ts']} "
                               f"alerts+={len(ev.alert_rows)}")
@@ -255,15 +255,17 @@ def run_file(args: argparse.Namespace) -> int:
     robots, alerts = translator.feed_many(read_jsonl(args.file))
     _stamp_site(robots, args.site)
     _stamp_site(alerts, args.site)
+    ws = _workspace_options(args)
+    if ws is None:  # the reason is already on stderr; no stack trace
+        return 2
 
     if args.dry_run:
         _print_rows("robots (upsert)", robots)
         _print_rows("alerts (insert, deduped)", alerts)
-        print(f"-- fleet_meta heartbeat: id=1 writer_id=yantrabridge (skipped: dry-run) --")
+        print("-- fleet_meta heartbeat: id=1 writer_id=yantrabridge (skipped: dry-run) --")
         return 0
 
-    with SupabaseSink(args.supabase_url, args.supabase_key,
-                      **_workspace_options(args)) as sink:
+    with SupabaseSink(args.supabase_url, args.supabase_key, **ws) as sink:
         counts = sink.push(robots, alerts)
     heartbeat = "heartbeat skipped (workspace mode)" if sink.ingest_key else "1 heartbeat"
     print(f"pushed: {counts['robots']} robot rows, {counts['alerts']} alerts, "
@@ -399,10 +401,8 @@ def run_mqtt(args: argparse.Namespace,
         print(f"command gate: polling approved commands every "
               f"{args.commands_interval}s -> instantActions")
 
-    resolved_url = (args.supabase_url or os.environ.get("SUPABASE_URL")
-                    or DEFAULT_SUPABASE_URL).rstrip("/")
-    resolved_key = (args.supabase_key or os.environ.get("SUPABASE_KEY")
-                    or DEFAULT_SUPABASE_KEY)
+    resolved_url, resolved_key = resolve_backend(args.supabase_url,
+                                                 args.supabase_key)
     config_client = httpx.Client(transport=transport) if transport is not None else None
     config = TablePoller(resolved_url, resolved_key, table="app_config",
                          keys=CONFIG_KEYS, client=config_client)

@@ -1,6 +1,26 @@
 # Changelog
 
 ## Unreleased — security hardening
+- **No built-in backend (breaking).** Every component now needs `SUPABASE_URL` and
+  `SUPABASE_KEY` (or `--url/--key`) and exits with a clear error otherwise; it no
+  longer falls back to the maintainers' project. `YANTRA_ALLOW_DEMO_BACKEND=1`
+  opts in to the public demo with a warning. `yantraops up --loopback` is
+  unaffected. New: `yantracore.backend`.
+- **Copilot secure by default (breaking).** `POST /ask` answers 401
+  `auth_not_configured` unless `SARATHI_TOKEN` is set or the operator sets
+  `SARATHI_ALLOW_OPEN=1` (the loopback orchestrator does; AWS/Azure kits have a
+  new `SARATHI_ALLOW_OPEN=""` line). CORS allows loopback origins only; `null` and
+  `*` must be listed in `SARATHI_CORS_ORIGINS`. `sarathi.app` can be imported
+  without a configured backend.
+- **Console sink guard.** All `innerHTML` assignments are sanitised by `YFSafe`
+  (inert parse, element/attribute/URL allowlisting, handler call-grammar), so one
+  missed escape no longer means script execution. 57 browser tests.
+- **Lint, types, coverage, releases.** `ruff` (incl. bandit rules) clean, `mypy`
+  blocking on six packages, coverage floors, conformance tool added to the CI
+  matrix; `release.yml` publishes `yantraconform` to PyPI by trusted publishing
+  and multi-arch images to GHCR with SBOM and SLSA provenance;
+  `docker/Dockerfile.conform` packages the tester. Branch protection enabled on
+  `main`.
 - **SSRF guard (`yantracore.netguard`).** `WEBHOOK_URL`, the Twilio credentials
   and `CONNECTOR_MQTT_HOST` are editable by a console admin through
   `app_settings` / `app_config`, so they are untrusted input to a *server-side*

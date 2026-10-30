@@ -140,7 +140,7 @@ def free_port() -> int:
 
 
 def resolve_supabase(url: str | None, key: str | None) -> tuple[str, str]:
-    """Cloud-mode config: flag > env > yantrasim's embedded default."""
+    """Cloud-mode config: flag > env; fails closed (see yantracore.backend)."""
     try:
         from yantrasim.transports.supabase import resolve_config
         return resolve_config(url, key)
@@ -149,7 +149,7 @@ def resolve_supabase(url: str | None, key: str | None) -> tuple[str, str]:
         resolved_key = key or os.environ.get("SUPABASE_KEY")
         if not (resolved_url and resolved_key):
             raise RuntimeError(
-                "--supabase mode needs --url/--key or SUPABASE_URL/SUPABASE_KEY")
+                "--supabase mode needs --url/--key or SUPABASE_URL/SUPABASE_KEY") from None
         return resolved_url.rstrip("/"), resolved_key
 
 
@@ -366,7 +366,10 @@ class FleetStack:
                     "--host", "127.0.0.1", "--port", str(port),
                     "--log-level", "warning",
                 ], cwd=copilot_dir,
-                   extra_env={"PYTHONPATH": str(copilot_dir)},
+                   # Bound to 127.0.0.1 only, so anonymous is acceptable here
+                   # unless the operator supplied a token (then it is enforced).
+                   extra_env={"PYTHONPATH": str(copilot_dir),
+                              "SARATHI_ALLOW_OPEN": "1"},
                    port=port, url=copilot_url)
 
             console_port = free_port()
@@ -456,7 +459,7 @@ class FleetStack:
         try:
             while not stop_event.is_set():
                 if deadline is not None and time.monotonic() >= deadline:
-                    self._say(f"yantraops: --duration reached, shutting down...")
+                    self._say("yantraops: --duration reached, shutting down...")
                     break
                 self._reap()
                 stop_event.wait(0.5)

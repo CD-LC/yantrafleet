@@ -23,8 +23,8 @@ python -m yantrasim --stdout --ticks 30 --interval 0   # offline fast-forward
 
 Useful flags: `--ticks N` (stop after N ticks; 0 = forever), `--seed`
 (deterministic runs), `--time-scale` (simulated seconds per wall second,
-default 5), `--url/--key` or env `SUPABASE_URL`/`SUPABASE_KEY` (override the
-embedded client-safe anon key), `--verbose`.
+default 5), `--url/--key` or env `SUPABASE_URL`/`SUPABASE_KEY` (required; no
+embedded default), `--verbose`.
 
 ## Simulation model
 

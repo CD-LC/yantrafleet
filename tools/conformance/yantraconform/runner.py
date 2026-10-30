@@ -329,9 +329,9 @@ class ConformanceRunner:
         for msg in batch:
             parts = spec.parse_topic(msg.topic)
             if msg.retain and parts is not None:
-                obs = self.collector.robots.get((parts.manufacturer, parts.serial))
-                if obs is not None and parts.subtopic in obs.retain_probe:
-                    obs.retain_probe[parts.subtopic] = True
+                robot = self.collector.robots.get((parts.manufacturer, parts.serial))
+                if robot is not None and parts.subtopic in robot.retain_probe:
+                    robot.retain_probe[parts.subtopic] = True
         # Fresh publishes that happened to land in this window are still
         # evidence; the retained replays are not (see the docstring).
         self.collector.feed_all([m for m in batch if not m.retain])

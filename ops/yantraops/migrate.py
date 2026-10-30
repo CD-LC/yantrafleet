@@ -175,7 +175,7 @@ class PsycopgBackend:
     def applied(self) -> dict[str, str]:
         with self._conn.transaction():
             rows = self._conn.execute(
-                f"select filename, checksum from {TRACKING_TABLE}").fetchall()
+                f"select filename, checksum from {TRACKING_TABLE}").fetchall()  # noqa: S608 (module constant)
         return {filename: checksum for filename, checksum in rows}
 
     def apply(self, filename: str, sql: str, checksum: str) -> None:
@@ -185,7 +185,7 @@ class PsycopgBackend:
         with self._conn.transaction():
             self._conn.execute(sql)
             self._conn.execute(
-                f"insert into {TRACKING_TABLE} (filename, checksum) "
+                f"insert into {TRACKING_TABLE} (filename, checksum) "  # noqa: S608 (module constant)
                 "values (%s, %s) "
                 "on conflict (filename) do update "
                 "  set checksum = excluded.checksum, applied_at = now()",

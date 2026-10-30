@@ -131,9 +131,17 @@ class TestSupabaseSink:
         assert sink.key == "env-key"
         sink.close()
 
-    def test_embedded_defaults(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_unconfigured_fails_closed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from yantracore.backend import BackendNotConfigured
         monkeypatch.delenv("SUPABASE_URL", raising=False)
         monkeypatch.delenv("SUPABASE_KEY", raising=False)
+        with pytest.raises(BackendNotConfigured):
+            SupabaseSink(transport=httpx.MockTransport(Recorder().handler))
+
+    def test_demo_backend_only_on_explicit_opt_in(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("SUPABASE_URL", raising=False)
+        monkeypatch.delenv("SUPABASE_KEY", raising=False)
+        monkeypatch.setenv("YANTRA_ALLOW_DEMO_BACKEND", "1")
         sink = SupabaseSink(transport=httpx.MockTransport(Recorder().handler))
         assert sink.url == DEFAULT_SUPABASE_URL
         assert sink.key.startswith("sb_publishable_")

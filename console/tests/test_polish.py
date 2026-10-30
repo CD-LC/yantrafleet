@@ -14,7 +14,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Callable
+from typing import Callable
 
 import pytest
 from playwright.sync_api import Page, expect

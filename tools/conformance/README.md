@@ -34,10 +34,19 @@ Every check names the clause it comes from and tells you what to change.
 Python 3.10 or newer. Nothing else.
 
 ```bash
-git clone https://github.com/punith-naga/yantrafleet.git
+# From a release (after the first `conform-v*` tag is published):
+pip install "yantraconform[mqtt]"
+docker run --rm ghcr.io/cd-lc/yantra-conform checks
+
+# From source, today:
+git clone https://github.com/CD-LC/yantrafleet.git
 cd yantrafleet
 pip install -e "tools/conformance[mqtt]"
 ```
+
+Releases are built by CI from a tag, published to PyPI with trusted
+publishing (no stored token), and ship with a CycloneDX SBOM and a SLSA build
+attestation. Verify with `gh attestation verify <file> --repo CD-LC/yantrafleet`.
 
 `[mqtt]` pulls in `paho-mqtt`, which is needed only to talk to a broker.
 Everything else — the rule set, replaying a capture, rendering a report — is

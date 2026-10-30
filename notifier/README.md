@@ -39,8 +39,8 @@ python -m yantranotify --interval 10 --dry-run    # print, never send
 python -m yantranotify --once --state-file ~/.yantranotify.json
 ```
 
-`--url/--key` (or `SUPABASE_URL`/`SUPABASE_KEY`) override the embedded
-Supabase project defaults.
+`--url/--key` (or `SUPABASE_URL`/`SUPABASE_KEY`) are required; there is no
+built-in project (`YANTRA_ALLOW_DEMO_BACKEND=1` opts in to the public demo).
 
 ## Webhook payload formats
 

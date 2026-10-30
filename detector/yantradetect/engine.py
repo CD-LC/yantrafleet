@@ -33,7 +33,7 @@ idempotent.
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal
 
@@ -56,7 +56,7 @@ def _minutes(start: datetime, now: datetime) -> int:
 def incident_id(robot_id: str, condition: str, opened_at: datetime) -> str:
     """Deterministic ``INC-XXXX`` id (idempotent across retries)."""
     seed = f"{robot_id}:{condition}:{opened_at.isoformat()}"
-    n = int.from_bytes(hashlib.sha1(seed.encode()).digest()[:4], "big")
+    n = int.from_bytes(hashlib.sha1(seed.encode(), usedforsecurity=False).digest()[:4], "big")
     return f"INC-{2000 + n % 8000}"
 
 

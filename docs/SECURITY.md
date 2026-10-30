@@ -257,13 +257,42 @@ time (rebinding). Close it at the network layer too: IMDSv2 with hop limit 1 (or
 a metadata firewall rule) and an egress policy on the notifier host. New code that
 makes a request to a configurable target **must** call `check_outbound_url`.
 
+## Where data goes: no built-in backend
+
+Every component (sim, connector, detector, notifier, copilot, ops) resolves its
+backend through `core/yantracore/backend.py`: `--url/--key`, else
+`SUPABASE_URL` + `SUPABASE_KEY`, and **both** must be set. Missing, it fails
+closed with the fix in the message; a half configuration is never completed from
+the demo project, and the demo is used only under an explicit
+`YANTRA_ALLOW_DEMO_BACKEND=1` (with a warning naming the destination). A fork
+that forgets to configure therefore stops, instead of leaking telemetry.
+
+## The copilot endpoint
+
+`POST /ask` can spend LLM quota and reads fleet data, so it is closed by
+default: it requires `SARATHI_TOKEN`, or the operator's explicit
+`SARATHI_ALLOW_OPEN=1`. CORS admits loopback origins only; other origins (and
+`null`, which `file://` pages send) must be named in `SARATHI_CORS_ORIGINS`.
+
+## Console markup safety
+
+Rendering is defended in three layers: values are defanged on the way in
+(`Sync.q`), template sites escape with `esc()`, and **every `innerHTML`
+assignment** passes through `YFSafe` (`console/index.html`), which parses in an
+inert document, drops scripts/frames/objects, removes event-handler attributes
+that are not calls the app itself wires, and rejects `javascript:` URLs. A
+missed escape no longer yields script execution. `tests/test_console_sinks.py`
+holds the hostile payloads; `test_console_static.py` fails if a new unguarded
+sink (`insertAdjacentHTML`, `outerHTML=`, `eval`, ...) appears. The academy
+page does not use the guard yet.
+
 ## Environment variables
 
 | Variable | Used by | Meaning |
 |---|---|---|
 | `SUPABASE_URL` | all services | Supabase project URL |
 | `SUPABASE_KEY` | all services | Demo mode: the anon key (default is baked in). Hardened/RBAC modes: **writers must switch this to the service_role key** — with `demo_all` gone, anon writes are refused |
-| `SARATHI_TOKEN` | copilot (`sarathi`) | Optional. When set, `POST /ask` requires `Authorization: Bearer <token>` and answers 401 otherwise (constant-time compare). `GET /health` stays open but reports `auth_required: true`. Unset = open (demo behaviour) |
+| `SARATHI_TOKEN` | copilot (`sarathi`) | Optional. When set, `POST /ask` requires `Authorization: Bearer <token>` and answers 401 otherwise (constant-time compare). `GET /health` stays open but reports `auth_required: true`. Unset = `/ask` answers 401 unless `SARATHI_ALLOW_OPEN=1` (anonymous, explicit opt-in) |
 | `YANTRA_WEBHOOK_SECRET` | notifier | Optional. When set, every webhook POST carries `X-Yantra-Signature: sha256=<hex>` — an HMAC-SHA256 of the exact request body — so receivers can verify the sender. Unset = no header |
 
 ## Mode 1 → 2: the hardening migration (`0006_harden.sql`)

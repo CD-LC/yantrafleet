@@ -69,7 +69,7 @@ def _window_rows(rows: list[dict[str, Any]], minutes: int) -> list[dict[str, Any
 def _make_source_id(tool: str, args: dict[str, Any]) -> tuple[str, str]:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     digest = hashlib.sha1(
-        json.dumps(args, sort_keys=True, default=str).encode()
+        json.dumps(args, sort_keys=True, default=str).encode(), usedforsecurity=False
     ).hexdigest()[:8]
     return f"{tool}:{digest}:{ts}", ts
 

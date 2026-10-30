@@ -247,10 +247,12 @@ class WhatsAppChannel:
             return True
         # sid is admin-editable and lands in the URL path: encode it so a
         # crafted value cannot add path segments or a query string.
+        sid, token = self.sid, self.token
+        assert sid and token  # guaranteed by self.configured above
         url = (f"{self.api_base}/2010-04-01/Accounts/"
-               f"{quote(self.sid, safe='')}/Messages.json")
+               f"{quote(sid, safe='')}/Messages.json")
         try:
-            resp = self._client.post(url, data=data, auth=(self.sid, self.token))
+            resp = self._client.post(url, data=data, auth=(sid, token))
             resp.raise_for_status()
             return True
         except httpx.HTTPError as exc:

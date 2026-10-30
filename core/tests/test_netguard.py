@@ -73,8 +73,6 @@ def test_any_bad_answer_in_a_multi_record_reply_refuses():
 def test_ip_literal_urls_refused(url):
     # the resolver returns the literal itself, as getaddrinfo does
     import ipaddress
-    from urllib.parse import urlsplit
-    host = urlsplit(url).hostname
     bad(url, resolver=lambda h, p: [str(ipaddress.ip_address(h))])
 
 

@@ -140,7 +140,7 @@ class MqttTransport:
         #: queued (serial, orderId, orderUpdateId, nodeIds, actions) awaiting poll_orders
         self._incoming_orders: list[tuple[str, str, int, list[str], list[dict[str, Any]]]] = []
         if client is not None:  # injected fake for offline tests
-            self.client = client
+            self.client: Any = client
             self._wire_client(self.client)
             self._subscribe_topics(self.client)
         else:

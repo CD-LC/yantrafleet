@@ -30,23 +30,39 @@ def test_ask_offline_tier(transport: StaticTransport) -> None:
     assert "R-004" in body["answer"]
 
 
-def test_cors_allows_null_origin(transport: StaticTransport) -> None:
-    """file:// consoles send Origin: null — the API must still be readable."""
+def _preflight(client: TestClient, origin: str):
+    return client.options("/ask", headers={
+        "Origin": origin, "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type"})
+
+
+def test_cors_allows_loopback_origins_by_default(transport: StaticTransport) -> None:
     client = TestClient(create_app(transport=transport, settings=_settings()))
-    resp = client.post(
-        "/ask", json={"question": "fleet status"}, headers={"Origin": "null"}
-    )
+    for origin in ("http://localhost:8080", "http://127.0.0.1:5173", "http://[::1]:3000"):
+        pre = _preflight(client, origin)
+        assert pre.status_code == 200
+        assert pre.headers.get("access-control-allow-origin") == origin
+
+
+def test_cors_refuses_null_wildcard_and_foreign_origins_by_default(
+        transport: StaticTransport) -> None:
+    client = TestClient(create_app(transport=transport, settings=_settings()))
+    for origin in ("null", "https://evil.example", "http://localhost.evil.example",
+                   "http://127.0.0.1.evil.example"):
+        resp = client.post("/ask", json={"question": "fleet status"},
+                           headers={"Origin": origin})
+        assert resp.headers.get("access-control-allow-origin") is None, origin
+        assert _preflight(client, origin).headers.get(
+            "access-control-allow-origin") is None, origin
+
+
+def test_null_origin_only_when_listed(transport: StaticTransport, monkeypatch) -> None:
+    monkeypatch.setenv("SARATHI_CORS_ORIGINS", "null")
+    client = TestClient(create_app(transport=transport, settings=_settings()))
+    resp = client.post("/ask", json={"question": "fleet status"},
+                       headers={"Origin": "null"})
     assert resp.status_code == 200
-    assert resp.headers.get("access-control-allow-origin") == "*"
-    pre = client.options(
-        "/ask",
-        headers={
-            "Origin": "null",
-            "Access-Control-Request-Method": "POST",
-            "Access-Control-Request-Headers": "content-type",
-        },
-    )
-    assert pre.status_code == 200
+    assert resp.headers.get("access-control-allow-origin") == "null"
 
 
 def test_ask_backend_down_still_200() -> None:

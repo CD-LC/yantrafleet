@@ -42,8 +42,8 @@ python -m yantraops migrate --db-url URL [--dir DIR] [--dry-run] [--force]
 
 * `--loopback` (default): zero-cloud demo against the in-process fake PostgREST.
 * `--supabase`: real Supabase; config precedence is flag > env
-  (`SUPABASE_URL`/`SUPABASE_KEY`) > the client-safe defaults embedded in the
-  packages. Before spawning anything, `up --supabase` probes
+  (`SUPABASE_URL`/`SUPABASE_KEY`); with neither it fails closed (no embedded
+  default; `YANTRA_ALLOW_DEMO_BACKEND=1` opts in to the public demo). Before spawning anything, `up --supabase` probes
   `{url}/rest/v1/robots?limit=1`; if the answer says the table is missing it
   prints `schema missing — run: python -m yantraops migrate --db-url ...`
   and exits with code 2 (a bad key also exits 2, with a key hint).

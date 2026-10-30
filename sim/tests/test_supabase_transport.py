@@ -3,6 +3,7 @@ import json
 
 import httpx
 import pytest
+from yantracore.backend import BackendNotConfigured
 
 from yantrasim.sim import FleetSim, SCRIPTED_FAULT_TICK
 from yantrasim.transports.supabase import (
@@ -44,14 +45,14 @@ def test_publish_bulk_upserts_robots(recorder):
     req, rows = by_table["robots"][0]
     # Endpoint + upsert semantics
     assert req.url.scheme == "https"
-    assert req.url.host == "mqrffzpaeqtngxcpttyx.supabase.co"
+    assert req.url.host == "backend.invalid"  # from the _test_backend fixture
     assert req.url.path == "/rest/v1/robots"
     assert req.url.params["on_conflict"] == "id"
     assert "resolution=merge-duplicates" in req.headers["Prefer"]
     assert "return=minimal" in req.headers["Prefer"]
     # Auth headers
-    assert req.headers["apikey"] == DEFAULT_KEY
-    assert req.headers["Authorization"] == f"Bearer {DEFAULT_KEY}"
+    assert req.headers["apikey"] == "test-key"
+    assert req.headers["Authorization"] == "Bearer test-key"
     # One bulk body, 10 rows, correct shape
     assert len(rows) == 10
     assert {r["id"] for r in rows} == {f"AMR-{i:02d}" for i in range(1, 11)}
@@ -123,6 +124,9 @@ def test_resolve_config_env_override(monkeypatch):
     assert (url2, key2) == ("https://x.test", "k2")
     monkeypatch.delenv("SUPABASE_URL")
     monkeypatch.delenv("SUPABASE_KEY")
+    with pytest.raises(BackendNotConfigured):
+        resolve_config()
+    monkeypatch.setenv("YANTRA_ALLOW_DEMO_BACKEND", "1")  # explicit opt-in only
     assert resolve_config() == (DEFAULT_URL, DEFAULT_KEY)
 
 

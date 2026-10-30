@@ -42,8 +42,12 @@ Transports (`sarathi/transport.py`):
 
 | Var | Default | Notes |
 |---|---|---|
-| `SUPABASE_URL` | `https://mqrffzpaeqtngxcpttyx.supabase.co` | demo project |
-| `SUPABASE_KEY` | `sb_publishable_…` | anon/publishable key (client-safe) |
+| `SUPABASE_URL` | **required** | your Supabase/PostgREST project. Unset = the service refuses to start (it never falls back to someone else's database) |
+| `SUPABASE_KEY` | **required** | anon/publishable key (client-safe) |
+| `YANTRA_ALLOW_DEMO_BACKEND` | unset | `1` = use the maintainers' public demo project when neither of the above is set (loud warning) |
+| `SARATHI_TOKEN` | — | bearer token `POST /ask` requires. **Without it `/ask` answers 401** unless `SARATHI_ALLOW_OPEN=1` |
+| `SARATHI_ALLOW_OPEN` | unset | `1` = allow anonymous `/ask` (loopback demos; public demo boxes behind the rate limit) |
+| `SARATHI_CORS_ORIGINS` | loopback only | comma-separated browser origins to allow; `null` (file:// pages) and `*` only if listed |
 | `GEMINI_API_KEY` | — | enables tiers 1-2 with `gemini/gemini-2.5-flash` (free tier) |
 | `OPENAI_API_KEY` | — | fallback provider, `gpt-4o-mini` |
 | `SARATHI_MODEL` | auto | any litellm model id; overrides auto-detection |
@@ -59,8 +63,11 @@ curl -s localhost:8001/ask -X POST -H 'content-type: application/json' \
      -d '{"question":"Which robots are low on battery?"}'
 ```
 
-CORS is wide open (credentials disabled), so a `file://` console can call it
-directly (the `null` origin is covered by `*`).
+**Secure by default.** `/ask` needs a bearer token (or an explicit
+`SARATHI_ALLOW_OPEN=1`), and CORS admits only loopback origins unless you list
+others in `SARATHI_CORS_ORIGINS`. A `file://` console sends the `null` origin, so
+for that set `SARATHI_CORS_ORIGINS=null` on purpose. `yantraops up --loopback`
+sets the open flag itself (it binds 127.0.0.1 only).
 
 ## Tests & golden evals (fully offline)
 

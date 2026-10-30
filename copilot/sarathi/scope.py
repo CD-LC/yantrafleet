@@ -42,11 +42,11 @@ SITE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$")
 DEMO_TOKEN_RE = re.compile(r"^[0-9a-f]{32,128}$")
 JWT_RE = re.compile(r"^[A-Za-z0-9._~+/=-]{1,8192}$")
 
-USER_TOKEN_HEADER = "x-yf-user-token"
-DEMO_TOKEN_HEADER = "x-yf-demo-token"
+USER_TOKEN_HEADER = "x-yf-user-token"  # noqa: S105 (a header name)
+DEMO_TOKEN_HEADER = "x-yf-demo-token"  # noqa: S105 (a header name)
 
 _site: ContextVar[str | None] = ContextVar("sarathi_site", default=None)
-_headers: ContextVar[dict[str, str]] = ContextVar("sarathi_headers", default={})
+_headers: ContextVar[dict[str, str]] = ContextVar("sarathi_headers", default={})  # noqa: B039 (never mutated)
 
 
 def current_site() -> str | None:

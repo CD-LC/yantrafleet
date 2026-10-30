@@ -62,7 +62,7 @@ ACTIONS = {
 def finding_id(robot_id: str, component: str, created_at: datetime) -> str:
     """Deterministic ``MF-XXXX`` id (idempotent across retries)."""
     seed = f"{robot_id}:{component}:{created_at.isoformat()}"
-    n = int.from_bytes(hashlib.sha1(seed.encode()).digest()[:4], "big")
+    n = int.from_bytes(hashlib.sha1(seed.encode(), usedforsecurity=False).digest()[:4], "big")
     return f"MF-{2000 + n % 8000}"
 
 
@@ -247,7 +247,7 @@ class MaintenanceEngine:
                 continue
             ta, tb = a.get("_ts"), b.get("_ts")
             ba, bb = a.get("battery"), b.get("battery")
-            if None in (ta, tb, ba, bb):
+            if ta is None or tb is None or ba is None or bb is None:
                 continue
             dt_min = (tb - ta).total_seconds() / 60.0
             if not 0 < dt_min <= 30:  # skip gaps and out-of-order rows

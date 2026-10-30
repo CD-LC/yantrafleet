@@ -147,3 +147,35 @@ def test_inline_script_parses(script: str, tmp_path: Path) -> None:
         [node, "--check", str(js)], capture_output=True, text=True, timeout=30
     )
     assert proc.returncode == 0, f"node --check failed:\n{proc.stderr}"
+
+
+# ---------------------------------------------------------------- sink guard
+
+def _script() -> str:
+    html = INDEX.read_text(encoding="utf-8")
+    return "\n".join(re.findall(r"<script>([\s\S]*?)</script>", html))
+
+
+def test_sink_guard_is_installed_before_any_render_code() -> None:
+    src = _script()
+    guard = src.index("const YFSafe=")
+    # nothing earlier than the guard may assign innerHTML, and it does install
+    assert ".innerHTML=" not in src[:guard]
+    assert "Object.defineProperty(Element.prototype,'innerHTML'" in src[guard:]
+
+
+@pytest.mark.parametrize("sink", [
+    r"\.insertAdjacentHTML\(", r"\.outerHTML\s*=", r"\.srcdoc\s*=",
+    r"\bcreateContextualFragment\(", r"\beval\(", r"\bnew Function\(",
+    r"setTimeout\(\s*['\"`]", r"setInterval\(\s*['\"`]",
+])
+def test_no_unguarded_html_or_code_sinks(sink: str) -> None:
+    """Only ``innerHTML`` is funnelled through YFSafe; any other way of turning
+    a string into markup or code would bypass it, so none may be added without
+    extending the guard (and this list) first."""
+    offenders = [m.group(0) for m in re.finditer(sink, _script())]
+    assert not offenders, offenders
+
+
+def test_document_write_is_limited_to_the_shift_report_window() -> None:
+    assert len(re.findall(r"\bdocument\.write\(|\bw\.document\.write\(", _script())) == 1

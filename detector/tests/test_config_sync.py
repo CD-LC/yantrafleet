@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 
 import yantradetect.__main__ as main_mod
-from yantradetect.__main__ import build_parser, run
+from yantradetect.__main__ import run
 
 FAULTED = [{"id": "AMR-02", "status": "fault", "fault_msg": "overtemp"}]
 

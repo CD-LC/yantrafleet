@@ -14,7 +14,7 @@ import pytest
 
 from mcp.shared.memory import create_connected_server_and_client_session
 
-from sarathi.mcp_server import SERVER_NAME, create_server
+from sarathi.mcp_server import create_server
 from sarathi.transport import FailingTransport, StaticTransport
 
 EXPECTED_TOOLS = {

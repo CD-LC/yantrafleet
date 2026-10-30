@@ -299,8 +299,9 @@ server {
     }
 
     # -- sarathi copilot API (uvicorn on loopback) ------------------------
-    # ANONYMOUS: yes *unless* you set SARATHI_TOKEN in /etc/yantrafleet.env,
-    # which turns on bearer auth in the app itself. Left open, /ask answers
+    # ANONYMOUS: only if you opt in. The app answers 401 unless SARATHI_TOKEN
+    # is set in /etc/yantrafleet.env (bearer auth) or you allow anonymous access
+    # with SARATHI_ALLOW_OPEN=1. When opened, /ask answers
     # questions grounded in this site's fleet data — the same data the
     # console's anon key already reads — so an open /ask on a demo-open box
     # exposes nothing the console did not. On a hardened or RBAC box, set

@@ -45,9 +45,12 @@ CERTBOT_EMAIL=""
 # 4) Optional. GEMINI_API_KEY enables the sarathi copilot's LLM tiers
 #    (leave empty for the offline tier). SARATHI_TOKEN, when set, makes
 #    /ask require "Authorization: Bearer <token>" - recommended once the
-#    box is on the public internet.
+#    box is on the public internet. With no token, /ask is CLOSED (401)
+#    unless SARATHI_ALLOW_OPEN=1 - set that only for a public demo box where
+#    anonymous questions are acceptable (the rate limit still applies).
 GEMINI_API_KEY=""
 SARATHI_TOKEN=""
+SARATHI_ALLOW_OPEN=""
 
 # 5) Optional. Notifier fan-out channels (yantranotify) - leave any of
 #    these empty to skip that channel; the notifier always still prints
@@ -139,6 +142,7 @@ SUPABASE_KEY=$SUPABASE_KEY
 YANTRA_SITE_ID=$YANTRA_SITE_ID
 GEMINI_API_KEY=$GEMINI_API_KEY
 SARATHI_TOKEN=$SARATHI_TOKEN
+SARATHI_ALLOW_OPEN=$SARATHI_ALLOW_OPEN
 WEBHOOK_URL=$WEBHOOK_URL
 YANTRA_WEBHOOK_SECRET=$YANTRA_WEBHOOK_SECRET
 TWILIO_SID=$TWILIO_SID

@@ -1,0 +1,22 @@
+# yantra-conform: the VDA 5050 conformance tester as a container.
+#
+#   docker build -f docker/Dockerfile.conform -t yantra-conform .
+#   docker run --rm yantra-conform checks
+#   docker run --rm -v "$PWD:/out" yantra-conform run \
+#       --broker mqtt://broker.example:1883 --html /out/report.html
+#
+# Only tools/conformance is copied: the tester is stdlib-only plus paho, and
+# shares no code with the simulator it is meant to grade independently.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_CACHE_DIR=1
+
+RUN useradd --create-home --uid 1000 conform
+WORKDIR /src
+COPY tools/conformance /src
+RUN pip install ".[mqtt]" && rm -rf /src
+
+USER conform
+WORKDIR /home/conform
+ENTRYPOINT ["yantra-conform"]
+CMD ["--help"]

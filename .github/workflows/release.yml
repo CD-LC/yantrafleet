@@ -1,0 +1,140 @@
+# Releases are built from a tag, never from a laptop.
+#
+#   conform-vX.Y.Z  ->  yantraconform to PyPI (trusted publishing, no token)
+#   vX.Y.Z          ->  GitHub Release + signed container images on GHCR
+#
+# Every artifact gets a SLSA build-provenance attestation and a CycloneDX SBOM.
+# One-time maintainer setup (cannot be done from a file): on pypi.org add a
+# "trusted publisher" for this repo, workflow `release.yml`, environment `pypi`;
+# then create the `pypi` environment in the repo settings (add a required
+# reviewer if you want a manual gate). Verify an artifact with:
+#   gh attestation verify <file-or-oci://image> --repo CD-LC/yantrafleet
+name: Release
+on:
+  push:
+    tags: ['v*', 'conform-v*']
+  workflow_dispatch:          # dry run: builds and tests, publishes nothing
+
+permissions:
+  contents: read
+
+jobs:
+  build-conform:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref_name, 'conform-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write         # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: { python-version: '3.12' }
+      - name: Tag matches the package version
+        if: startsWith(github.ref_name, 'conform-v')
+        run: |
+          want="${GITHUB_REF_NAME#conform-v}"
+          have=$(python - <<'PY'
+          import tomllib; print(tomllib.load(open('tools/conformance/pyproject.toml','rb'))['project']['version'])
+          PY
+          )
+          [ "$want" = "$have" ] || { echo "tag $want != pyproject $have"; exit 1; }
+      - name: Test
+        run: |
+          pip install pytest build cyclonedx-bom
+          pip install -e "tools/conformance[mqtt]"
+          cd tools/conformance && python -m pytest tests -q
+      - name: Build sdist and wheel
+        run: python -m build tools/conformance --outdir dist
+      - name: Wheel installs and runs in a clean venv
+        run: |
+          python -m venv /tmp/v && /tmp/v/bin/pip install dist/*.whl
+          /tmp/v/bin/yantra-conform --version
+          /tmp/v/bin/yantra-conform checks | head -3
+      - name: SBOM (CycloneDX) of what the wheel pulls in
+        run: |
+          /tmp/v/bin/pip install "$(ls dist/*.whl)[mqtt]" cyclonedx-bom
+          /tmp/v/bin/cyclonedx-py environment --of JSON -o dist/yantraconform.cdx.json
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.event_name != 'workflow_dispatch'
+        with: { subject-path: 'dist/*' }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with: { name: conform-dist, path: dist/, if-no-files-found: error }
+
+  publish-conform:
+    needs: build-conform
+    if: startsWith(github.ref_name, 'conform-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      id-token: write         # PyPI trusted publishing
+      contents: write         # attach files to the GitHub Release
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: { name: conform-dist, path: dist }
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist
+          skip-existing: false
+      - name: GitHub Release
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY"
+          --title "yantra-conform ${GITHUB_REF_NAME#conform-v}"
+          --notes "VDA 5050 conformance tester. pip install 'yantraconform[mqtt]'. See CHANGELOG.md."
+
+  images:
+    if: github.event_name == 'workflow_dispatch' || (startsWith(github.ref_name, 'v') && !startsWith(github.ref_name, 'conform-'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: yantrafleet,    dockerfile: docker/Dockerfile }
+          - { name: yantra-conform, dockerfile: docker/Dockerfile.conform }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: { persist-credentials: false }
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      - id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: ${{ github.event_name != 'workflow_dispatch' }}
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        if: github.event_name != 'workflow_dispatch'
+        with:
+          subject-name: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true

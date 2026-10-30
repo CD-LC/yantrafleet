@@ -424,6 +424,133 @@ select.inp{padding:6px 8px}
 <script>
 "use strict";
 /* ================================================================
+   HTML SINK GUARD  (second line of defence behind _defang and esc()).
+
+   This file renders ~190 template strings into innerHTML, and in demo and
+   sandbox modes strangers can write the rows those strings interpolate. A
+   sanitiser on the READ path only helps while every path goes through it; one
+   missed path is stored XSS. So every assignment to Element.innerHTML is
+   funnelled through here too, whatever produced the string:
+
+   * parsed in an INERT document (DOMParser: no script runs, no image loads,
+     no handler fires), in the right context for SVG/table targets, then the
+     checked nodes are adopted -- the string is never re-serialised, so
+     mutation-XSS has nothing to mutate;
+   * dangerous elements dropped (script, iframe, object, embed, base, meta,
+     link, style, template, math, foreignObject, and SVG animation that targets
+     an href or an event);
+   * an event-handler attribute survives only if (a) it is, character for
+     character, a handler this file's own source contains, or (b) it is a plain
+     call -- `head(literal, ...)` / `head = literal`, `;`-separated -- whose
+     `head` is one this file's source already wires to a handler, and whose
+     arguments are quoted/numeric literals. An injected error handler that
+     calls alert, a click handler that calls fetch, or a legitimate call
+     followed by a second statement are all dropped; a copied-in call to a
+     function the app already wires merely does what a click already does;
+   * URL attributes keep http(s), mailto, tel, fragments and relative paths
+     (data:image only for <img src>); `javascript:` and friends are dropped in
+     any spelling; srcdoc is dropped; target=_blank gets rel=noopener.
+
+   Regression-tested in tests/test_console_sinks.py with hostile payloads.
+   ================================================================ */
+const YFSafe=(()=>{
+  const DENY=new Set(['script','iframe','frame','frameset','object','embed','applet','base','meta','link','style','template','noscript','portal','math','foreignobject']);
+  const URL_ATTR=new Set(['href','src','xlink:href','action','formaction','data','poster','background','ping','srcset']);
+  const WRAP={tbody:['<table><tbody>'],thead:['<table><thead>'],tfoot:['<table><tfoot>'],
+    tr:['<table><tbody><tr>'],td:['<table><tbody><tr><td>'],th:['<table><tbody><tr><th>'],
+    select:['<select>'],optgroup:['<select><optgroup>'],colgroup:['<table><colgroup>']};
+  /* What the app's own source wires to handlers: exact static values and call heads. */
+  const src=Array.from(document.scripts).filter(s=>!s.src).map(s=>s.textContent).join('\n');
+  const unesc=s=>s.replace(/\\/g,'');
+  const exact=new Set(), heads=new Set();
+  const headOf=/(?:^|[;{(\s])([A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*(?=[(=])/g;
+  const collect=v=>{
+    if(!v||/\$\{/.test(v)){ /* dynamic: only harvest the call heads */
+      for(const m of (v||'').replace(/\$\{[^}]*\}/g,'').replace(/'[^']*'/g,"''").matchAll(headOf))heads.add(m[1]);return;}
+    exact.add(unesc(v));
+    for(const m of v.replace(/'[^']*'/g,"''").matchAll(headOf))heads.add(m[1]);
+  };
+  for(const m of src.matchAll(/\bon[a-z]+=\\?"([^"\\]*(?:\\.[^"\\]*)*)\\?"/g))collect(m[1]);
+  /* handlers built as plain strings: chip(label,"go('x')") and {go:"..."} */
+  for(const m of src.matchAll(/(?:\bgo:|\bchip\([^,()]*(?:\([^)]*\))?[^,()]*,)\s*["']([^"']*)["']/g))collect(m[1]);
+  /* never callable from an injected handler, even if the source mentions them */
+  const NEVER=new Set(['window','document','eval','Function','fetch','alert','prompt','confirm','open','setTimeout','setInterval','XMLHttpRequest','import','atob','btoa','postMessage','localStorage','sessionStorage','top','parent','self','globalThis','navigator','if','return','event','this','new','typeof','void']);
+  for(const h of Array.from(heads))if(NEVER.has(h.split('.')[0]))heads.delete(h);
+  const LIT="(?:'[^'\\\\<>`]*'|-?\\d+(?:\\.\\d+)?|true|false|null|this(?:\\.value)?|event)";
+  const CALL=new RegExp("^([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\(\\s*(?:"+LIT+"(?:\\s*,\\s*"+LIT+")*)?\\s*\\)$");
+  const ASSIGN=new RegExp("^([A-Za-z_$][\\w$]*(?:\\.[A-Za-z_$][\\w$]*)*)\\s*=\\s*(?:'[^'\\\\<>`]*'|-?\\d+(?:\\.\\d+)?)$");
+  function handlerOk(v){
+    if(exact.has(unesc(v)))return true;
+    if(/[`<>\\]|\$\{/.test(v)||v.length>400)return false;
+    for(const st of v.split(';').map(s=>s.trim()).filter(Boolean)){
+      if(st==='return false')continue;
+      const m=CALL.exec(st)||ASSIGN.exec(st);
+      if(!m||!heads.has(m[1]))return false;
+    }
+    return true;
+  }
+  const urlOk=(name,v,tag)=>{
+    const s=v.replace(/[\u0000-\u0020\u00a0\u1680\u180e\u2000-\u2029\u205f\u3000\ufeff]+/g,'').toLowerCase();
+    if(name==='srcset')return !/[a-z][a-z0-9+.-]*:/.test(s.replace(/https?:/g,''));
+    const sch=/^([a-z][a-z0-9+.-]*):/.exec(s);
+    if(!sch)return true;                                   /* relative, #frag, //host handled by CSP */
+    if(['http','https','mailto','tel'].includes(sch[1]))return true;
+    return sch[1]==='data'&&tag==='img'&&name==='src'&&/^data:image\/(?:png|jpe?g|gif|webp);base64,[a-z0-9+\/=]*$/.test(s);
+  };
+  function clean(root){
+    const kill=[];
+    const walk=n=>{
+      for(const el of Array.from(n.children||[])){
+        const tag=el.localName.toLowerCase();
+        if(DENY.has(tag)){kill.push(el);continue;}
+        if((tag==='animate'||tag==='set'||tag==='animatetransform'||tag==='animatemotion')&&
+           /^(on|href|xlink)/i.test(el.getAttribute('attributeName')||'')){kill.push(el);continue;}
+        for(const a of Array.from(el.attributes)){
+          const name=a.name.toLowerCase();
+          if(name.startsWith('on')){ if(!handlerOk(a.value))el.removeAttribute(a.name); }
+          else if(name==='srcdoc')el.removeAttribute(a.name);
+          else if(URL_ATTR.has(name)&&!urlOk(name,a.value,tag))el.removeAttribute(a.name);
+        }
+        if(tag==='a'&&(el.getAttribute('target')||'').toLowerCase()==='_blank')el.setAttribute('rel','noopener noreferrer');
+        walk(el);
+      }
+    };
+    walk(root);
+    kill.forEach(el=>el.remove());
+  }
+  /* Parse `html` as it would be parsed inside `ctx`, sanitised, ready to insert. */
+  function fragment(html,ctx){
+    const ctag=(ctx&&ctx.localName||'').toLowerCase();
+    let pre='',post='';
+    if(ctx&&ctx.namespaceURI==='http://www.w3.org/2000/svg'&&ctag!=='foreignobject'){pre='<svg>';post='</svg>';}
+    else if(WRAP[ctag]){pre=WRAP[ctag][0];}
+    const doc=new DOMParser().parseFromString('<!doctype html><body>'+pre+html+post,'text/html');
+    let host=doc.body;
+    if(post)host=doc.body.firstElementChild;                /* the wrapper svg */
+    else if(pre){                                           /* descend to the element standing in for ctx */
+      let n=doc.body.firstElementChild;
+      while(n&&n.localName!==ctag&&n.firstElementChild)n=n.firstElementChild;
+      host=n||doc.body;
+    }
+    clean(host);
+    const frag=document.createDocumentFragment();
+    for(const c of Array.from(host.childNodes))frag.appendChild(document.adoptNode(c));
+    return frag;
+  }
+  const d=Object.getOwnPropertyDescriptor(Element.prototype,'innerHTML');
+  Object.defineProperty(Element.prototype,'innerHTML',{configurable:true,enumerable:d.enumerable,get:d.get,
+    set(v){
+      const s=v==null?'':String(v);
+      const t=this.localName.toLowerCase();
+      if(s===''||t==='textarea'||t==='title'||t==='option'){d.set.call(this,s);return;}
+      if(t==='script'||t==='style'){d.set.call(this,'');return;}
+      try{this.replaceChildren(fragment(s,this));}
+      catch(e){d.set.call(this,'');console.error('YFSafe: refused markup',e);}
+    }});
+  return {fragment,handlerOk,urlOk,heads,exact};
+})();
+
+/* ================================================================
    FleetMind demo — all mock. Architecture mirrors the real product:
    Sim (→ later: MQTT/VDA5050 ingest) → Store → Views + Copilot
    ================================================================ */

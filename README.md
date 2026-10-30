@@ -176,8 +176,9 @@ py -m yantrabridge --file connector\sample.jsonl
 py -m yantrasim --stdout --ticks 20
 ```
 
-Configuration: `SUPABASE_URL` / `SUPABASE_KEY` override the embedded
-free-tier project in every component. Copilot LLM tiers activate with
+Configuration: every component needs `SUPABASE_URL` + `SUPABASE_KEY` for your own
+project, or it refuses to start (nothing falls back to the maintainers' project
+unless you set `YANTRA_ALLOW_DEMO_BACKEND=1`). `--loopback` needs neither. Copilot LLM tiers activate with
 `GEMINI_API_KEY` or `OPENAI_API_KEY` (or `SARATHI_MODEL`); without a key it
 serves grounded template answers (`tier: offline`).
 

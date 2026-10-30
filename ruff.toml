@@ -1,0 +1,30 @@
+# One lint config for every Python component. Run:  ruff check .
+target-version = "py310"
+line-length = 110
+extend-exclude = [".venv", "supabase/oneshot"]
+
+[lint]
+select = [
+  "E4", "E7", "E9",   # syntax and import errors, bad comparisons
+  "F",                # pyflakes: unused/undefined names
+  "B",                # bugbear: likely bugs
+  "S",                # bandit: security
+  "W6",               # deprecated syntax
+]
+ignore = [
+  "S101",   # assert is the test idiom, and an invariant check elsewhere
+  "B905",   # zip(strict=) needs 3.10-only semantics decided per call site
+  "E501",
+  "S110",   # best-effort teardown/cleanup swallows errors by design
+  "E731",   # lambda assignment: fine in tests and one-off scripts
+  "E702",   # compact one-line statements are the style of the single-file apps
+  "E741",   # short names (l, O) in tight numeric helpers
+  "S104",   # binding 0.0.0.0 is a deliberate, documented container option
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S105", "S106", "S108", "S110", "S311", "S603", "S604", "S607", "B011", "B017", "B018", "B023", "E402", "E731"]
+"e2e/**" = ["S105", "S106", "S108", "S110", "S311", "S603", "S607", "E402"]
+"scripts/**" = ["S603", "S607"]
+"sim/**" = ["S311"]          # simulated robots, not cryptography
+"ops/**" = ["S603"]          # argv lists built by the orchestrator, no shell

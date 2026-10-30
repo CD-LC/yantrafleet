@@ -98,11 +98,11 @@ from urllib.parse import quote
 DEMO_SITE_PREFIX = "DEMO-"
 
 #: The header every sandbox request carries (``public.yf_demo_token``).
-DEMO_TOKEN_HEADER = "x-yf-demo-token"
+DEMO_TOKEN_HEADER = "x-yf-demo-token"  # noqa: S105 (a header name)
 
 #: How the token reaches the driver child. NOT argv: ``ps`` is world-readable
 #: on most boxes and the token is a bearer credential.
-DEMO_TOKEN_ENV = "YANTRAOPS_DEMO_TOKEN"
+DEMO_TOKEN_ENV = "YANTRAOPS_DEMO_TOKEN"  # noqa: S105 (an env var name)
 
 #: Same shape guard as ``yf_demo_token()``: hex only, 32..128 chars.
 TOKEN_RE = re.compile(r"^[0-9a-f]{32,128}$")
@@ -1053,7 +1053,6 @@ class HistorySeeder:
         if robots:
             src = str(robots[0].get("id"))
             opened = now - timedelta(minutes=94)
-            closed = now - timedelta(minutes=79)
             self.api.write("incidents", [{
                 "id": f"{self.site}-INC-0001",
                 "sev": "serious",
