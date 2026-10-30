@@ -48,7 +48,7 @@ Configuration (env vars override the embedded client-safe defaults):
 
 | Env var | Default |
 |---|---|
-| `SUPABASE_URL` | `https://flwyvhsmgrrqpmhcqlzd.supabase.co` |
+| `SUPABASE_URL` | `https://mqrffzpaeqtngxcpttyx.supabase.co` |
 | `SUPABASE_KEY` | embedded publishable anon key (client-safe) |
 
 Flags: `--battery-threshold` (default 20%), `--mqtt-topic`, `--mqtt-username`,

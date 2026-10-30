@@ -64,7 +64,7 @@ def test_original_app_preserved(html: str) -> None:
         "function rOverview", # views
         "function rLiveOps",
         "openIncident('INC-1042')",
-        "flwyvhsmgrrqpmhcqlzd.supabase.co",
+        "mqrffzpaeqtngxcpttyx.supabase.co",
     ):
         assert marker in html, f"expected original-app marker missing: {marker}"
 

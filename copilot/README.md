@@ -42,7 +42,7 @@ Transports (`sarathi/transport.py`):
 
 | Var | Default | Notes |
 |---|---|---|
-| `SUPABASE_URL` | `https://flwyvhsmgrrqpmhcqlzd.supabase.co` | demo project |
+| `SUPABASE_URL` | `https://mqrffzpaeqtngxcpttyx.supabase.co` | demo project |
 | `SUPABASE_KEY` | `sb_publishable_…` | anon/publishable key (client-safe) |
 | `GEMINI_API_KEY` | — | enables tiers 1-2 with `gemini/gemini-2.5-flash` (free tier) |
 | `OPENAI_API_KEY` | — | fallback provider, `gpt-4o-mini` |

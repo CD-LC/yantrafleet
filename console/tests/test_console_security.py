@@ -34,7 +34,7 @@ assert _spec and _spec.loader
 fakerest = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fakerest)
 
-DEFAULT_SUPA = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
+DEFAULT_SUPA = "https://mqrffzpaeqtngxcpttyx.supabase.co"
 EVIL = "https://evil.example"
 
 

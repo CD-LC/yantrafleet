@@ -408,9 +408,9 @@ const _vetUrl=(name,raw,fallback)=>{
   if(!ok){_blockedCfg.push(name);return fallback;}
   return u.href.replace(/\/$/,'');
 };
-const _SUPA_DEFAULT='https://flwyvhsmgrrqpmhcqlzd.supabase.co';
+const _SUPA_DEFAULT='https://mqrffzpaeqtngxcpttyx.supabase.co';
 const SUPA_URL=_vetUrl('supa',_cfg.get('supa'),_SUPA_DEFAULT);
-const SUPA_KEY=(SUPA_URL!==_SUPA_DEFAULT&&!_blockedCfg.includes('supa')&&_cfg.get('key'))||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
+const SUPA_KEY=(SUPA_URL!==_SUPA_DEFAULT&&!_blockedCfg.includes('supa')&&_cfg.get('key'))||'sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8'; // publishable anon key — safe client-side
 const AUTH_URL=_vetUrl('auth',_cfg.get('auth'),SUPA_URL);   // /auth/v1 base (tests point it at a stub)
 window.SITE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}$/.test(_cfg.get('site')||'')?_cfg.get('site'):null;
 if(_blockedCfg.length)setTimeout(()=>toast('⚠ Ignored untrusted '+_blockedCfg.join(', ')+' override in the link — using the default backend.'),1200);

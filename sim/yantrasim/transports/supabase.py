@@ -46,8 +46,8 @@ from ..translate import alert_row, fleet_meta_row, robot_row, telemetry_row
 
 log = logging.getLogger(__name__)
 
-DEFAULT_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
-DEFAULT_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+DEFAULT_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
+DEFAULT_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
 
 #: Explicit, deliberate opt-out of the command site filter. See
 #: :func:`resolve_site` and ``docs/SECURITY.md``.

@@ -375,7 +375,7 @@ def test_site_param_exposed_on_window(page: Page, console_url: str) -> None:
 def test_defaults_unchanged_without_params(page: Page, console_server: str) -> None:
     """With no query params the shipped Supabase constants still apply."""
     page.goto(f"{console_server}/index.html")
-    assert page.evaluate("SUPA_URL") == "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
+    assert page.evaluate("SUPA_URL") == "https://mqrffzpaeqtngxcpttyx.supabase.co"
     assert page.evaluate("SUPA_KEY").startswith("sb_publishable_")
     assert page.evaluate("window.SITE") is None
 

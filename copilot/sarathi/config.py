@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 # Client-safe defaults for the Yantrika demo project.
-DEFAULT_SUPABASE_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
-DEFAULT_SUPABASE_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+DEFAULT_SUPABASE_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
+DEFAULT_SUPABASE_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
 
 # Default models per provider (free-tier friendly).
 DEFAULT_GEMINI_MODEL = "gemini/gemini-2.5-flash"

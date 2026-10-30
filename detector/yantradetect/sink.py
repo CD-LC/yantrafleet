@@ -20,8 +20,8 @@ from .engine import Action
 
 log = logging.getLogger(__name__)
 
-DEFAULT_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
-DEFAULT_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+DEFAULT_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
+DEFAULT_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
 
 
 def resolve_config(url: str | None = None, key: str | None = None) -> tuple[str, str]:

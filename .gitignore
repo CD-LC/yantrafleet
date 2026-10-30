@@ -27,3 +27,6 @@ sandboxes.json
 .DS_Store
 .idea/
 .vscode/
+
+# one-off paste-into-SQL-editor bundles (generated copies of the migrations)
+supabase/oneshot/

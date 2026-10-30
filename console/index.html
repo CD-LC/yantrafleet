@@ -466,10 +466,10 @@ const _vetUrl=(name,raw,fallback)=>{
   if(!ok){_blockedCfg.push(name);return fallback;}
   return u.href.replace(/\/$/,'');
 };
-const _SUPA_DEFAULT='https://flwyvhsmgrrqpmhcqlzd.supabase.co';
+const _SUPA_DEFAULT='https://mqrffzpaeqtngxcpttyx.supabase.co';
 const SUPA_URL=_vetUrl('supa',_cfg.get('supa'),_SUPA_DEFAULT);
 // ?key= only travels with a vetted ?supa= — never pair a stranger's key with ours.
-const SUPA_KEY=(SUPA_URL!==_SUPA_DEFAULT&&!_blockedCfg.includes('supa')&&_cfg.get('key'))||'sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf'; // publishable anon key — safe client-side
+const SUPA_KEY=(SUPA_URL!==_SUPA_DEFAULT&&!_blockedCfg.includes('supa')&&_cfg.get('key'))||'sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8'; // publishable anon key — safe client-side
 const MOCK_MODE=_cfg.get('mode')==='demo'||_cfg.get('demo')==='mock'||_hash==='demo'||_hash==='mock';
 const DEMO_TOKEN=(!MOCK_MODE&&/^[0-9a-f]{32,128}$/.test(_cfg.get('demo')||''))?_cfg.get('demo'):null;
 // A site id ends up in PostgREST filters and element ids: slug characters only.

@@ -44,7 +44,7 @@ def test_publish_bulk_upserts_robots(recorder):
     req, rows = by_table["robots"][0]
     # Endpoint + upsert semantics
     assert req.url.scheme == "https"
-    assert req.url.host == "flwyvhsmgrrqpmhcqlzd.supabase.co"
+    assert req.url.host == "mqrffzpaeqtngxcpttyx.supabase.co"
     assert req.url.path == "/rest/v1/robots"
     assert req.url.params["on_conflict"] == "id"
     assert "resolution=merge-duplicates" in req.headers["Prefer"]

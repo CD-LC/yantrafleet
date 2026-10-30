@@ -24,8 +24,8 @@ import httpx
 
 from yantracore import site_id as _default_site_id
 
-DEFAULT_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
-DEFAULT_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+DEFAULT_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
+DEFAULT_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
 
 NOTIFY_SEVERITIES = ("crit", "serious")
 

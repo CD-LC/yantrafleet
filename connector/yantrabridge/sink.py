@@ -34,8 +34,8 @@ import httpx
 log = logging.getLogger(__name__)
 
 # Client-safe publishable anon key — fine to embed; override via env vars.
-DEFAULT_SUPABASE_URL = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
-DEFAULT_SUPABASE_KEY = "sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf"
+DEFAULT_SUPABASE_URL = "https://mqrffzpaeqtngxcpttyx.supabase.co"
+DEFAULT_SUPABASE_KEY = "sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8"
 
 #: 0019 ingest-key contract (public.yf_ingest_key / yf_is_workspace_site).
 #: Duplicated here rather than imported: the connector is a standalone

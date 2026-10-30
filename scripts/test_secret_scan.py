@@ -26,7 +26,7 @@ def test_service_role_jwt_is_flagged_but_anon_jwt_is_not():
 
 def test_new_style_keys():
     assert scan_line("k=sb_secret_" + "a1B2c3D4" * 4)
-    assert scan_line("k=sb_publishable_7rqvPRggmPDRKNL8Jurcqg_Hf531puf") == []
+    assert scan_line("k=sb_publishable_mOjh5X1pbJUi7d6Iy0LgBA_o8kPDZI8") == []
 
 
 def test_common_token_shapes():

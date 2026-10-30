@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page
 
-DEFAULT_SUPA = "https://flwyvhsmgrrqpmhcqlzd.supabase.co"
+DEFAULT_SUPA = "https://mqrffzpaeqtngxcpttyx.supabase.co"
 
 
 @pytest.fixture()
