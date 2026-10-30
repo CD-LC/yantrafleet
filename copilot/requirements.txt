@@ -10,7 +10,7 @@ litellm>=1.40
 
 # MCP surface (sarathi.mcp_server) — official Model Context Protocol SDK.
 # <2: the MCP test helpers (mcp.shared.memory) were removed in 2.x; move to 2.x together with the tests.
-mcp>=1.9,<2
+mcp>=2.3.0,<3
 
 # Tests
 pytest>=8.0
