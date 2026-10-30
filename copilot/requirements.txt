@@ -6,7 +6,7 @@ pydantic>=2.6
 
 # Tiers 1-2 only (LLM). The service and tests run without it if you only
 # need the offline tier — the import is lazy.
-litellm>=1.40
+litellm>=1.106.4
 
 # MCP surface (sarathi.mcp_server) — official Model Context Protocol SDK.
 mcp>=1.9
